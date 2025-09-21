@@ -18,7 +18,6 @@
 </head>
 <body class="bg-gray-900 text-gray-200">
 
-
     <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <header class="text-center mb-8">
             <h1 class="text-3xl md:text-4xl font-extrabold tracking-tight text-white">Operation Offload</h1>
@@ -34,8 +33,7 @@
 
         <div class="bg-gray-800 shadow-xl rounded-lg p-6">
             <div id="chat-window" class="h-96 overflow-y-auto bg-gray-900 p-4 rounded-lg border border-gray-700 mb-4 space-y-4">
-                <!-- Chat messages will be appended here -->
-            </div>
+                </div>
 
             <div class="flex items-center">
                 <textarea id="prompt-input" class="flex-grow bg-gray-700 border-gray-600 rounded-l-md shadow-sm py-2 px-4 text-gray-200 focus:outline-none focus:ring-teal-500 focus:border-teal-500" placeholder="Send a message..." rows="1"></textarea>
@@ -44,14 +42,10 @@
         </div>
     </div>
 
-    <script async defer src="https://apis.google.com/js/api.js?onload=gapiLoaded"></script>
-    <script async defer src="https://accounts.google.com/gsi/client?onload=gisLoaded"></script>
-
     <script>
         // --- CONFIGURATION ---
-        // CRITICAL: Replace these placeholder values with your actual credentials.
         const CLIENT_ID = '700648198913-6itdi4jv7mhdhpq3ncqavndst36imo76.apps.googleusercontent.com';
-        const API_KEY = 'AIzaSyCZIUCIhmX9H8Qr7PZJbkVu5Ue7ZOs-H9U'; // Replace with your actual API Key
+        const API_KEY = 'AIzaSyCZIUCIhmX9H8Qr7PZJbkVu5Ue7ZOs-H9U';
         const SCOPES = 'https://www.googleapis.com/auth/drive.file';
         let DRIVE_FOLDER_ID = null;
 
@@ -67,7 +61,7 @@
         let gisInited = false;
         let tokenClient;
 
-        // --- INITIALIZATION (Hardened against Race Conditions) ---
+        // --- INITIALIZATION ---
         function gapiLoaded() {
             gapi.load('client', initializeGapiClient);
         }
@@ -92,7 +86,7 @@
                 tokenClient = google.accounts.oauth2.initTokenClient({
                     client_id: CLIENT_ID,
                     scope: SCOPES,
-                    callback: '', // Will be defined dynamically
+                    callback: '', // Will be defined dynamically in handleAuthClick
                 });
                 gisInited = true;
                 console.log("GIS client initialized.");
@@ -104,14 +98,12 @@
         }
 
         function maybeEnableButtons() {
+            // Only enable the auth button if both libraries are ready.
             if (gapiInited && gisInited) {
                 authorizeButton.disabled = false;
                 console.log("Authentication buttons enabled.");
             }
         }
-
-        window.gapiLoaded = gapiLoaded;
-        window.gisLoaded = gisLoaded;
 
         // --- AUTH LOGIC ---
         authorizeButton.onclick = handleAuthClick;
@@ -121,14 +113,17 @@
             tokenClient.callback = async (resp) => {
                 if (resp.error !== undefined) {
                     console.error("Authentication error:", resp);
-                    authStatus.textContent = `Auth Error: ${resp.error}`;
+                    authStatus.textContent = `Auth Error: ${resp.error_description || resp.error}`;
                     return;
                 }
                 await postAuthSetup();
             };
+
             if (gapi.client.getToken() === null) {
+                // Prompt the user to select an account and grant consent for the first time
                 tokenClient.requestAccessToken({ prompt: 'consent' });
             } else {
+                // Skip display of account chooser and consent dialog for subsequent calls
                 tokenClient.requestAccessToken({ prompt: '' });
             }
         }
@@ -140,9 +135,10 @@
             authorizeButton.classList.add('hidden');
             try {
                 DRIVE_FOLDER_ID = await findOrCreateFolder('Gemini_Synapse_Offload');
-                authStatus.textContent = `Setup complete. Ready to offload to folder: "Gemini_Synapse_Offload"`;
+                authStatus.textContent = `Setup complete. Ready to offload artifacts.`;
             } catch (error) {
                 authStatus.textContent = `Error setting up Drive folder: ${error.message}`;
+                authStatus.classList.replace('text-green-400', 'text-red-400');
                 console.error(error);
             }
         }
@@ -156,411 +152,57 @@
                 authStatus.classList.replace('text-green-400', 'text-yellow-400');
                 signoutButton.classList.add('hidden');
                 authorizeButton.classList.remove('hidden');
+                DRIVE_FOLDER_ID = null;
             }
         }
-        
+
         // --- CORE APPLICATION LOGIC ---
         const addMessage = (htmlContent, isUser = false) => {
             const bubble = document.createElement('div');
             bubble.className = `w-full flex ${isUser ? 'justify-end' : 'justify-start'}`;
-            const content = document.createElement('div');
-            content.className = `p-3 rounded-lg max-w-[90%] ${isUser ? 'chat-bubble-user' : 'chat-bubble-ai'}`;
-            content.innerHTML = htmlContent;
-            bubble.appendChild(content);
+            const contentWrapper = document.createElement('div');
+            contentWrapper.className = `p-3 rounded-lg max-w-[90%] ${isUser ? 'chat-bubble-user' : 'chat-bubble-ai'}`;
+            contentWrapper.innerHTML = htmlContent;
+            bubble.appendChild(contentWrapper);
             chatWindow.appendChild(bubble);
             chatWindow.scrollTop = chatWindow.scrollHeight;
         };
 
         const sendMessage = async () => {
-             const prompt = promptInput.value.trim();
-             if (!prompt) return;
-             addMessage(`<p>${prompt}</p>`, true);
-             promptInput.value = '';
-             addMessage('<p>Thinking...</p>');
-             const aiResponse = `<p>Here is an artifact. I will now offload it.</p>
+            const prompt = promptInput.value.trim();
+            if (!prompt) return;
+
+            addMessage(`<p>${prompt}</p>`, true);
+            promptInput.value = '';
+            
+            // Add a placeholder message that will be updated later
+            addMessage('<p>Thinking...</p>'); 
+
+            // --- SIMULATED AI RESPONSE ---
+            // This is where you would call your actual AI. For this demo, we simulate a response.
+            const aiResponse = `<p>Here is the complex artifact you requested. I will now offload it to your Google Drive.</p>
+
 http://googleusercontent.com/immersive_entry_chip/0
-`;
-             await processAndOffload(aiResponse);
+
+<p>The offload process should now be complete.</p>`;
+
+            // Process the response for offloading
+            await processAndOffload(aiResponse);
         };
-        
+
         async function processAndOffload(responseHtml) {
-            if (!gapi.client.getToken()) {
-                chatWindow.lastChild.querySelector('div').innerHTML = '<p class="text-red-400">Authentication required. Please sign in to offload artifacts.</p>';
+            const lastAiBubble = chatWindow.lastChild?.querySelector('div');
+            if (!lastAiBubble) return;
+
+            if (!gapi.client.getToken() || !DRIVE_FOLDER_ID) {
+                lastAiBubble.innerHTML = '<p class="text-red-400">Authentication required. Please sign in to offload artifacts.</p>';
                 return;
             }
-            const immersiveRegex = /
-http://googleusercontent.com/immersive_entry_chip/1
-        </div>
-
-        <div class="bg-gray-800 shadow-xl rounded-lg p-6">
-            <div id="chat-window" class="h-96 overflow-y-auto bg-gray-900 p-4 rounded-lg border border-gray-700 mb-4 space-y-4">
-                <!-- Chat messages will be appended here -->
-            </div>
-
-            <div class="flex items-center">
-                <textarea id="prompt-input" class="flex-grow bg-gray-700 border-gray-600 rounded-l-md shadow-sm py-2 px-4 text-gray-200 focus:outline-none focus:ring-teal-500 focus:border-teal-500" placeholder="Send a message..." rows="1"></textarea>
-                <button id="send-button" class="bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-r-md self-stretch">Send</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- The external scripts are now loaded at the end of the body for better performance -->
-    <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
-    <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
-
-    <script>
-        // --- CONFIGURATION ---
-        const CLIENT_ID = 700648198913-6itdi4jv7mhdhpq3ncqavndst36imo76.apps.googleusercontent.com;
-        const API_KEY = AIzaSyCZIUCIhmX9H8Qr7PZJbkVu5Ue7ZOs-H9U';
-        const SCOPES = 'https://www.googleapis.com/auth/drive.file';
-        let DRIVE_FOLDER_ID = null;
-
-        // --- UI ELEMENTS ---
-        const authorizeButton = document.getElementById('authorize_button');
-        const signoutButton = document.getElementById('signout_button');
-        const authStatus = document.getElementById('auth-status');
-        const chatWindow = document.getElementById('chat-window');
-        const promptInput = document.getElementById('prompt-input');
-        const sendButton = document.getElementById('send-button');
-
-        let gapiInited = false;
-        let gisInited = false;
-        let tokenClient;
-
-        // --- INITIALIZATION (Hardened against Race Conditions) ---
-        function gapiLoaded() {
-            gapi.load('client', initializeGapiClient);
-        }
-
-        async function initializeGapiClient() {
-            try {
-                await gapi.client.init({
-                    apiKey: API_KEY,
-                    discoveryDocs: ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"],
-                });
-                gapiInited = true;
-                console.log("GAPI client initialized.");
-                maybeEnableButtons();
-            } catch (error) {
-                console.error("Error initializing GAPI client:", error);
-                authStatus.textContent = "Error: Could not initialize Google API client.";
-            }
-        }
-
-        function gisLoaded() {
-            try {
-                tokenClient = google.accounts.oauth2.initTokenClient({
-                    client_id: CLIENT_ID,
-                    scope: SCOPES,
-                    callback: '', // Will be defined dynamically
-                });
-                gisInited = true;
-                console.log("GIS client initialized.");
-                maybeEnableButtons();
-            } catch (error) {
-                console.error("Error initializing GIS client:", error);
-                authStatus.textContent = "Error: Could not initialize Google Sign-In.";
-            }
-        }
-
-        function maybeEnableButtons() {
-            // Only enable the button if BOTH libraries are ready.
-            if (gapiInited && gisInited) {
-                authorizeButton.disabled = false;
-                console.log("Authentication buttons enabled.");
-            }
-        }
-
-        // Attach the loaders to the window object so the external scripts can find them
-        window.gapiLoaded = gapiLoaded;
-        window.gisLoaded = gisLoaded;
-
-        // --- AUTH LOGIC ---
-        authorizeButton.onclick = handleAuthClick;
-        signoutButton.onclick = handleSignoutClick;
-
-        function handleAuthClick() {
-            tokenClient.callback = async (resp) => {
-                if (resp.error !== undefined) {
-                    console.error("Authentication error:", resp);
-                    authStatus.textContent = `Auth Error: ${resp.error}`;
-                    return;
-                }
-                await postAuthSetup();
-            };
-
-            if (gapi.client.getToken() === null) {
-                tokenClient.requestAccessToken({ prompt: 'consent' });
-            } else {
-                tokenClient.requestAccessToken({ prompt: '' });
-            }
-        }
-
-        async function postAuthSetup() {
-            authStatus.textContent = 'Authorization successful! Setting up Drive folder...';
-            authStatus.classList.replace('text-yellow-400', 'text-green-400');
-            signoutButton.classList.remove('hidden');
-            authorizeButton.classList.add('hidden');
-            try {
-                DRIVE_FOLDER_ID = await findOrCreateFolder('Gemini_Synapse_Offload');
-                authStatus.textContent = `Setup complete. Ready to offload to folder: "Gemini_Synapse_Offload"`;
-            } catch (error) {
-                authStatus.textContent = `Error setting up Drive folder: ${error.message}`;
-                console.error(error);
-            }
-        }
-
-        function handleSignoutClick() {
-            const token = gapi.client.getToken();
-            if (token !== null) {
-                google.accounts.oauth2.revoke(token.access_token);
-                gapi.client.setToken('');
-                authStatus.textContent = 'Signed Out.';
-                authStatus.classList.replace('text-green-400', 'text-yellow-400');
-                signoutButton.classList.add('hidden');
-                authorizeButton.classList.remove('hidden');
-            }
-        }
-        
-        // --- CORE APPLICATION LOGIC ---
-        const addMessage = (htmlContent, isUser = false) => {
-            const bubble = document.createElement('div');
-            bubble.className = `w-full flex ${isUser ? 'justify-end' : 'justify-start'}`;
-            const content = document.createElement('div');
-            content.className = `p-3 rounded-lg max-w-[90%] ${isUser ? 'chat-bubble-user' : 'chat-bubble-ai'}`;
-            content.innerHTML = htmlContent;
-            bubble.appendChild(content);
-            chatWindow.appendChild(bubble);
-            chatWindow.scrollTop = chatWindow.scrollHeight;
-        };
-
-        const sendMessage = async () => {
-             const prompt = promptInput.value.trim();
-             if (!prompt) return;
-             addMessage(`<p>${prompt}</p>`, true);
-             promptInput.value = '';
-             addMessage('<p>Thinking...</p>');
-             // This is where you would call your actual AI.
-             // For this demo, we simulate a response.
-             const aiResponse = `<p>Here is an artifact. I will now offload it.</p>
-http://googleusercontent.com/immersive_entry_chip/0
-`;
-             await processAndOffload(aiResponse);
-        };
-        
-        async function processAndOffload(responseHtml) {
-            if (!gapi.client.getToken()) {
-                chatWindow.lastChild.querySelector('div').innerHTML = '<p class="text-red-400">Authentication required. Please sign in to offload artifacts.</p>';
-                return;
-            }
+            
+            // Regex to find custom <immersive> tags for offloading
             const immersiveRegex = /
 http://googleusercontent.com/immersive_entry_chip/1
 
-
-                <button id="send-button" class="bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-r-md self-stretch">Send</button>
-            </div>
-        </div>
-    </div>
-
-    <script src="https://apis.google.com/js/api.js"></script>
-    <script src="https://accounts.google.com/gsi/client"></script>
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            
-            // --- CONFIGURATION ---
-            const CLIENT_ID = 700648198913-6itdi4jv7mhdhpq3ncqavndst36imo76.apps.googleusercontent.com;
-            const API_KEY = AIzaSyCZIUCIhmX9H8Qr7PZJbkVu5Ue7ZOs-H9U;
-            const SCOPES = 'https://www.googleapis.com/auth/drive.file';
-            let DRIVE_FOLDER_ID = null; 
-
-            const authorizeButton = document.getElementById('authorize_button');
-            const signoutButton = document.getElementById('signout_button');
-            const authStatus = document.getElementById('auth-status');
-            const chatWindow = document.getElementById('chat-window');
-            const promptInput = document.getElementById('prompt-input');
-            const sendButton = document.getElementById('send-button');
-
-            let gapiInited = false;
-            let gisInited = false;
-            let tokenClient;
-
-            function gapiLoaded() { gapi.load('client', initializeGapiClient); }
-            window.gapiLoaded = gapiLoaded;
-
-            async function initializeGapiClient() {
-                await gapi.client.init({ apiKey: API_KEY, discoveryDocs: ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"] });
-                gapiInited = true;
-                maybeEnableButtons();
-            }
-
-            function gisLoaded() {
-                tokenClient = google.accounts.oauth2.initTokenClient({
-                    client_id: CLIENT_ID,
-                    scope: SCOPES,
-                    callback: '', 
-                });
-                gisInited = true;
-                maybeEnableButtons();
-            }
-            window.gisLoaded = gisLoaded;
-
-            function maybeEnableButtons() {
-                if (gapiInited && gisInited) { authorizeButton.disabled = false; }
-            }
-
-            authorizeButton.onclick = handleAuthClick;
-            signoutButton.onclick = handleSignoutClick;
-
-            function handleAuthClick() {
-                tokenClient.callback = async (resp) => {
-                    if (resp.error !== undefined) throw (resp);
-                    await postAuthSetup();
-                };
-                if (gapi.client.getToken() === null) {
-                    tokenClient.requestAccessToken({ prompt: 'consent' });
-                } else {
-                    tokenClient.requestAccessToken({ prompt: '' });
-                }
-            }
-            
-            async function postAuthSetup() {
-                authStatus.textContent = 'Authorization successful! Setting up Drive folder...';
-                authStatus.classList.replace('text-yellow-400', 'text-green-400');
-                signoutButton.classList.remove('hidden');
-                authorizeButton.classList.add('hidden');
-                DRIVE_FOLDER_ID = await findOrCreateFolder('Gemini_Synapse_Offload');
-                authStatus.textContent = `Setup complete. Offloading to folder: "Gemini_Synapse_Offload"`;
-            }
-
-            function handleSignoutClick() {
-                const token = gapi.client.getToken();
-                if (token !== null) {
-                    google.accounts.oauth2.revoke(token.access_token);
-                    gapi.client.setToken('');
-                    authStatus.textContent = 'Signed Out.';
-                    authStatus.classList.replace('text-green-400', 'text-yellow-400');
-                    signoutButton.classList.add('hidden');
-                    authorizeButton.classList.remove('hidden');
-                }
-            }
-
-             const addMessage = (htmlContent, isUser = false) => {
-                const bubble = document.createElement('div');
-                bubble.className = `w-full flex ${isUser ? 'justify-end' : 'justify-start'}`;
-                const content = document.createElement('div');
-                content.className = `p-3 rounded-lg max-w-[90%] ${isUser ? 'chat-bubble-user' : 'chat-bubble-ai'}`;
-                content.innerHTML = htmlContent;
-                bubble.appendChild(content);
-                chatWindow.appendChild(bubble);
-                chatWindow.scrollTop = chatWindow.scrollHeight;
-            };
-
-            const sendMessage = async () => {
-                const prompt = promptInput.value.trim();
-                if (!prompt) return;
-                addMessage(`
-${prompt}
-
-`, true);
-                promptInput.value = '';
-                
-                // This is where you would normally call your real AI.
-                // For this demo, we'll simulate a response with a code block.
-                const aiResponse = `<p>Here is the complex artifact you requested. I will now offload it to your Google Drive.</p>
-<immersive id="genesis_engine_v3" type="code" title="Genesis_Engine_v3_Code">
-<!DOCTYPE html>
-<html>
-<head><title>This is a very large file.</title></head>
-<body><h1>The full content of this generated artifact is now being saved directly to your Google Drive to keep our conversation lightweight and performant.</h1></body>
-</html>
-</immersive>
-<p>The offload process is complete.</p>`;
-                
-                addMessage('<p>Thinking...</p>');
-                await processAndOffload(aiResponse);
-            };
-            
-            async function processAndOffload(responseHtml) {
-                if (!gapi.client.getToken()) {
-                    addMessage('<p class="text-red-400">Authentication required. Please sign in to offload artifacts.</p>');
-                    return;
-                }
-                const immersiveRegex = /<immersive id="([^"]+)" type="([^"]+)" title="([^"]+)">([\s\S]*?)<\/immersive>/g;
-                let processedHtml = responseHtml;
-                let matches = [...responseHtml.matchAll(immersiveRegex)];
-                for (const match of matches) {
-                    const title = match[3];
-                    let content = match[4];
-                    // Decode HTML entities
-                    const txt = document.createElement("textarea");
-                    txt.innerHTML = content;
-                    content = txt.value;
-                    const filename = `${title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.html`;
-                    try {
-                        const fileLink = await uploadToDrive(filename, content);
-                        const linkHtml = `<div class="my-2 p-3 bg-gray-800 rounded-lg border border-teal-500">
-                            <p class="font-semibold text-teal-300">Artifact Offloaded:</p>
-                            <a href="${fileLink}" target="_blank" class="text-blue-400 hover:underline break-all">${title}</a>
-                            </div>`;
-                        processedHtml = processedHtml.replace(match[0], linkHtml);
-                    } catch (error) {
-                         const errorHtml = `<div class="my-2 p-3 bg-red-900/50 rounded-lg border border-red-500">
-                            <p class="font-semibold text-red-300">Offload Failed:</p>
-                            <p class="text-sm">${error.message}</p>
-                            </div>`;
-                        processedHtml = processedHtml.replace(match[0], errorHtml);
-                    }
-                }
-                chatWindow.lastChild.querySelector('div').innerHTML = processedHtml;
-            }
-
-            async function findOrCreateFolder(folderName) {
-                const response = await gapi.client.drive.files.list({
-                    q: `mimeType='application/vnd.google-apps.folder' and name='${folderName}' and trashed=false`,
-                    fields: 'files(id, name)',
-                });
-                if (response.result.files.length > 0) {
-                    console.log(`Found folder '${folderName}' with ID: ${response.result.files[0].id}`);
-                    return response.result.files[0].id;
-                } else {
-                    const fileMetadata = { name: folderName, mimeType: 'application/vnd.google-apps.folder' };
-                    const file = await gapi.client.drive.files.create({ resource: fileMetadata, fields: 'id' });
-                    console.log(`Created folder '${folderName}' with ID: ${file.result.id}`);
-                    return file.result.id;
-                }
-            }
-
-            async function uploadToDrive(filename, content) {
-                const boundary = '-------314159265358979323846';
-                const delimiter = "\r\n--" + boundary + "\r\n";
-                const close_delim = "\r\n--" + boundary + "--";
-                const metadata = { name: filename, mimeType: 'text/html', parents: [DRIVE_FOLDER_ID] };
-                const multipartRequestBody = delimiter + 'Content-Type: application/json\r\n\r\n' + JSON.stringify(metadata) + delimiter + 'Content-Type: text/html\r\n\r\n' + content + close_delim;
-                const request = await gapi.client.request({
-                    'path': 'https://www.googleapis.com/upload/drive/v3/files', 'method': 'POST',
-                    'params': {'uploadType': 'multipart'}, 'headers': { 'Content-Type': 'multipart/related; boundary="' + boundary + '"' },
-                    'body': multipartRequestBody
-                });
-                const fileId = request.result.id;
-                await gapi.client.drive.permissions.create({ fileId: fileId, resource: { role: 'reader', type: 'anyone' } });
-                const file = await gapi.client.drive.files.get({ fileId: fileId, fields: 'webViewLink' });
-                return file.result.webViewLink;
-            }
-
-            sendButton.onclick = sendMessage;
-            promptInput.addEventListener('keypress', (e) => {
-                 if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-            });
-
-            authorizeButton.disabled = true; // Disabled until libraries load
-        });
-    </script>
-    <script async defer src="https://apis.google.com/js/api.js?onload=gapiLoaded"></script>
-    <script async defer src="https://accounts.google.com/gsi/client?onload=gisLoaded"></script>
-
-</body>
-
-</html>
 
 
 
