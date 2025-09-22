@@ -1,248 +1,15 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Operation Offload: Intelligent Workspace</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <style>
-        body { font-family: 'Inter', sans-serif; background-color: #111827; color: #f3f4f6; }
-        .chat-bubble-user { background-color: #1f2937; border: 1px solid #374151; }
-        .chat-bubble-ai { background-color: #374151; border: 1px solid #4b5563; }
-        .code-block { font-family: 'Roboto Mono', monospace; }
-        ::-webkit-scrollbar { width: 8px; }
-        ::-webkit-scrollbar-track { background: #1f2937; }
-        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
-        .neon-glow { box-shadow: 0 0 5px rgba(13, 182, 150, 0.4), 0 0 10px rgba(13, 182, 150, 0.3); }
-        .text-neon-green { color: #39ff14; text-shadow: 0 0 5px #39ff14; }
-        .animate-float { animation: float-in 0.5s ease-out forwards; }
-        @keyframes float-in {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-    </style>
-</head>
-<body class="bg-gray-900 text-gray-200">
-
-    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <header class="text-center mb-8">
-            <h1 class="text-3xl md:text-4xl font-extrabold tracking-tight text-white">Operation Offload</h1>
-            <p class="mt-2 max-w-2xl mx-auto text-lg text-gray-400">A quantum workspace with automated artifact offloading to your Neural Matrix (Google Drive).</p>
-        </header>
-
-        <div id="auth-section" class="bg-gray-800 shadow-xl rounded-lg p-6 mb-8 text-center">
-            <h2 class="text-xl font-bold text-teal-400 mb-4">Authentication Status</h2>
-            <p id="auth-status" class="text-yellow-400 mb-4">Initializing quantum sync...</p>
-            <button id="authorize_button" disabled class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md disabled:bg-gray-500 disabled:cursor-not-allowed">Sign In with Google</button>
-            <button id="signout_button" class="hidden bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md">Sign Out</button>
-            <div id="drive-status" class="mt-2 text-sm text-gray-400"></div>
-        </div>
-
-        <div class="bg-gray-800 shadow-xl rounded-lg p-6">
-            <div id="archive-controls" class="hidden bg-gray-700 rounded-lg p-4 mb-4">
-                <div class="flex flex-wrap items-center justify-between gap-4 mb-4">
-                    <h3 class="text-lg font-semibold text-white">📦 Archive & Download</h3>
-                    <div class="flex flex-wrap gap-2">
-                        <button id="download-current-chat" class="bg-purple-600 hover:bg-purple-700 text-white text-sm py-2 px-3 rounded disabled:bg-gray-500" disabled>💾 Current Chat</button>
-                        <button id="download-all-drive-content" class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm py-2 px-3 rounded disabled:bg-gray-500" disabled>📁 All Drive Files</button>
-                        <button id="bulk-download-interactions" class="bg-green-600 hover:bg-green-700 text-white text-sm py-2 px-3 rounded disabled:bg-gray-500" disabled>🗂️ Bulk Export</button>
-                        <button id="generate-summary-report" class="bg-yellow-600 hover:bg-yellow-700 text-white text-sm py-2 px-3 rounded disabled:bg-gray-500" disabled>📊 Summary Report</button>
-                    </div>
-                </div>
-                <div id="download-progress" class="hidden">
-                    <div class="bg-gray-600 rounded-full h-2 mb-2">
-                        <div id="progress-bar" class="bg-blue-500 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
-                    </div>
-                    <p id="progress-text" class="text-sm text-gray-300">Preparing download...</p>
-                </div>
-                <div id="download-status" class="text-sm text-gray-400"></div>
-            </div>
-
-            <div id="chat-window" class="h-96 overflow-y-auto bg-gray-900 p-4 rounded-lg border border-gray-700 mb-4 space-y-4">
-                 <div class="w-full flex justify-start">
-                    <div class="p-4 rounded-xl max-w-[90%] chat-bubble-ai neon-glow">
-                         <p>Welcome to Operation Offload. Please sync with the Google Matrix to begin artifact generation.</p>
-                    </div>
-                </div>
-            </div>
-
-            <div class="flex items-center">
-                <textarea id="prompt-input" class="flex-grow bg-gray-700 border-gray-600 rounded-l-md shadow-sm py-2 px-4 text-gray-200 focus:outline-none focus:ring-teal-500 focus:border-teal-500 resize-none" placeholder="Awaiting quantum sync..." rows="1" disabled></textarea>
-                <button id="send-button" class="bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-r-md self-stretch disabled:bg-gray-500 disabled:cursor-not-allowed" disabled>⚡TRANSMIT</button>
-            </div>
-        </div>
-    </div>
-
-    <script async defer src="https://apis.google.com/js/api.js?onload=gapiLoaded"></script>
-    <script async defer src="https://accounts.google.com/gsi/client?onload=gisLoaded"></script>
-
-    <script>
-        // --- CONFIGURATION ---
-        const CLIENT_ID = '700648198913-6itdi4jv7mhdhpq3ncqavndst36imo76.apps.googleusercontent.com';
-        const API_KEY = 'AIzaSyCZIUCIhmX9H8Qr7PZJbkVu5Ue7ZOs-H9U'; // IMPORTANT: This key needs Google Drive API enabled
-        const GEMINI_API_KEY = 'AIzaSyCZIUCIhmX9H8Qr7PZJbkVu5Ue7ZOs-H9U'; // IMPORTANT: This key needs Gemini API enabled
-        const SCOPES = 'https://www.googleapis.com/auth/drive.file';
-        const GEMINI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent';
-        
-        let DRIVE_FOLDER_ID = null;
-        let conversationHistory = [];
-
-        // --- UI ELEMENTS ---
-        const authorizeButton = document.getElementById('authorize_button');
-        const signoutButton = document.getElementById('signout_button');
-        const authStatus = document.getElementById('auth-status');
-        const driveStatus = document.getElementById('drive-status');
-        const chatWindow = document.getElementById('chat-window');
-        const promptInput = document.getElementById('prompt-input');
-        const sendButton = document.getElementById('send-button');
-
-        let gapiInited = false;
-        let gisInited = false;
-        let tokenClient;
-        let isProcessing = false;
-
-        // --- INITIALIZATION ---
-        function gapiLoaded() {
-            gapi.load('client', initializeGapiClient);
-        }
-
-        async function initializeGapiClient() {
-            try {
-                await gapi.client.init({
-                    apiKey: API_KEY,
-                    discoveryDocs: ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"],
-                });
-                gapiInited = true;
-                console.log("GAPI client initialized.");
-                maybeEnableButtons();
-            } catch (error) {
-                console.error("Error initializing GAPI client:", error);
-                authStatus.textContent = "Error: Could not initialize Google API client.";
-                authStatus.classList.add('text-red-400');
-            }
-        }
-
-        function gisLoaded() {
-            try {
-                tokenClient = google.accounts.oauth2.initTokenClient({
-                    client_id: CLIENT_ID,
-                    scope: SCOPES,
-                    callback: '', // Will be defined dynamically in handleAuthClick
-                });
-                gisInited = true;
-                console.log("GIS client initialized.");
-                maybeEnableButtons();
-            } catch (error) {
-                console.error("Error initializing GIS client:", error);
-                authStatus.textContent = "Error: Could not initialize Google Sign-In.";
-                authStatus.classList.add('text-red-400');
-            }
-        }
-
-        function maybeEnableButtons() {
-            if (gapiInited && gisInited) {
-                authorizeButton.disabled = false;
-                authStatus.textContent = "Ready to authenticate with Google Drive";
-                console.log("Authentication system ready.");
-            }
-        }
-
-        // --- AUTH LOGIC ---
-        authorizeButton.onclick = handleAuthClick;
-        signoutButton.onclick = handleSignoutClick;
-
-        function handleAuthClick() {
-            tokenClient.callback = async (resp) => {
-                if (resp.error !== undefined) {
-                    console.error("Authentication error:", resp);
-                    authStatus.textContent = `Auth Error: ${resp.error_description || resp.error}`;
-                    authStatus.classList.add('text-red-400');
-                    return;
-                }
-                await postAuthSetup();
-            };
-
-            if (gapi.client.getToken() === null) {
-                tokenClient.requestAccessToken({ prompt: 'consent' });
-            } else {
-                tokenClient.requestAccessToken({ prompt: '' });
-            }
-        }
-
-        async function postAuthSetup() {
-            authStatus.textContent = 'Authorization successful! Setting up Drive folder...';
-            authStatus.classList.remove('text-yellow-400', 'text-red-400');
-            authStatus.classList.add('text-green-400');
-            signoutButton.classList.remove('hidden');
-            authorizeButton.classList.add('hidden');
-            
-            try {
-                DRIVE_FOLDER_ID = await findOrCreateFolder('Gemini_Synapse_Offload');
-                authStatus.textContent = `✅ Quantum Sync Complete. Ready for transmission.`;
-                driveStatus.textContent = `Neural Matrix: Gemini_Synapse_Offload`;
-                
-                // Enable chat functionality
-                promptInput.disabled = false;
-                sendButton.disabled = false;
-                promptInput.placeholder = "Transmit your request to the quantum AI...";
-                
-                // Show and enable archive controls
-                document.getElementById('archive-controls').classList.remove('hidden');
-                enableArchiveFeatures();
-                
-            } catch (error) {
-                authStatus.textContent = `Error setting up Drive folder: ${error.message}`;
-                authStatus.classList.remove('text-green-400');
-                authStatus.classList.add('text-red-400');
-                console.error(error);
-            }
-        }
-
-        function handleSignoutClick() {
-            const token = gapi.client.getToken();
-            if (token !== null) {
-                google.accounts.oauth2.revoke(token.access_token);
-                gapi.client.setToken('');
-                authStatus.textContent = 'Signed Out. Please sign in to use the workspace.';
-                authStatus.classList.remove('text-green-400');
-                authStatus.classList.add('text-yellow-400');
-                driveStatus.textContent = '';
-                signoutButton.classList.add('hidden');
-                authorizeButton.classList.remove('hidden');
-                DRIVE_FOLDER_ID = null;
-                
-                // Disable chat functionality
-                promptInput.disabled = true;
-                sendButton.disabled = true;
-                promptInput.placeholder = "Awaiting quantum sync...";
-                
-                // Hide archive controls
-                document.getElementById('archive-controls').classList.add('hidden');
-                disableArchiveFeatures();
-            }
-        }
-
-        // --- ENHANCED CHAT & AI FUNCTIONS ---
-
-        const extractionSettings = {
-            filePrefix: 'op-offload_',
-            preserveLinks: true,
-        };
-
-        const contentTypes = {
-            code: { patterns: ['javascript', 'python', 'function', 'const', 'let', 'import', '<div>', 'class'] },
-            list: { patterns: ['- ', '* ', '1.', '2.'] },
-            document: { patterns: ['summary', 'report', 'analysis', 'overview'] }
-        };
-
+// --- ENHANCED CHAT FUNCTIONS ---
         async function callGeminiAPI(message) {
             try {
                 const response = await fetch(`${GEMINI_ENDPOINT}?key=${GEMINI_API_KEY}`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', },
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
                     body: JSON.stringify({
-                        contents: [{ parts: [{ text: message }] }],
+                        contents: [{
+                            parts: [{ text: message }]
+                        }],
                         generationConfig: {
                             temperature: 0.7,
                             topP: 0.8,
@@ -251,14 +18,18 @@
                         }
                     })
                 });
+
                 if (!response.ok) {
                     const errorData = await response.json();
                     throw new Error(`Quantum API Error ${response.status}: ${errorData.error?.message || 'Unknown neural disruption'}`);
                 }
+
                 const data = await response.json();
+                
                 if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
                     throw new Error('Invalid quantum response format');
                 }
+
                 return data.candidates[0].content.parts[0].text;
             } catch (error) {
                 console.error('🔴 Quantum AI Error:', error);
@@ -269,27 +40,44 @@
         const addMessage = (htmlContent, isUser = false) => {
             const bubble = document.createElement('div');
             bubble.className = `w-full flex ${isUser ? 'justify-end' : 'justify-start'} animate-float`;
+            
             const contentWrapper = document.createElement('div');
             contentWrapper.className = `p-4 rounded-xl max-w-[90%] ${isUser ? 'chat-bubble-user' : 'chat-bubble-ai'} neon-glow transition-all duration-300 hover:scale-105`;
             
             const header = document.createElement('div');
-            header.className = 'flex items-center mb-2 text-xs font-mono text-gray-400';
-            header.innerHTML = `<span>${isUser ? '👤 NEURAL USER' : '🤖 QUANTUM AI'}</span><span class="mx-2">|</span><span>${new Date().toLocaleTimeString()}</span>`;
-
+            header.className = 'flex items-center mb-2';
+            header.innerHTML = `
+                <span class="mr-2">${isUser ? '👤' : '🤖'}</span>
+                <span class="font-semibold text-sm ${isUser ? 'text-neon-blue' : 'text-neon-purple'}">
+                    ${isUser ? 'NEURAL USER' : 'QUANTUM AI ASSISTANT'}
+                </span>
+                <span class="ml-auto text-xs text-gray-400">${new Date().toLocaleTimeString()}</span>
+            `;
+            
             const content = document.createElement('div');
             content.innerHTML = htmlContent;
-
+            
+            const footer = document.createElement('div');
+            footer.className = 'text-xs text-gray-400 mt-2 flex justify-between';
+            footer.innerHTML = `
+                <span>Quantum state: ${isUser ? 'TRANSMITTED' : 'PROCESSED'}</span>
+                <span class="data-stream w-4 h-1 rounded"></span>
+            `;
+            
             contentWrapper.appendChild(header);
             contentWrapper.appendChild(content);
+            contentWrapper.appendChild(footer);
             bubble.appendChild(contentWrapper);
+            
             chatWindow.appendChild(bubble);
             chatWindow.scrollTop = chatWindow.scrollHeight;
             
-            return contentWrapper; // Return reference for updates
+            return contentWrapper;
         };
 
         const sendMessage = async () => {
             if (isProcessing) return;
+            
             const prompt = promptInput.value.trim();
             if (!prompt) return;
 
@@ -300,42 +88,57 @@
 
             isProcessing = true;
             sendButton.disabled = true;
-            sendButton.innerHTML = '⚡PROCESSING...';
+            sendButton.innerHTML = '<span class="mr-2">⚡</span>PROCESSING...';
 
+            // Add user message
             addMessage(`<p>${escapeHtml(prompt)}</p>`, true);
             promptInput.value = '';
-
-            const loadingMessage = addMessage('<p>🧠 Quantum neural networks processing...</p>');
+            
+            // Add loading message
+            const loadingMessage = addMessage('<p><span class="animate-pulse text-neon-blue">🧠 Quantum neural networks processing...</span></p>');
 
             try {
+                // Enhanced context building
                 let contextMessage = prompt;
                 if (conversationHistory.length > 0) {
                     const recentHistory = conversationHistory.slice(-6);
-                    const contextParts = recentHistory.map(item => `${item.role.toUpperCase()}: ${item.content}`).join('\n');
+                    const contextParts = recentHistory.map(item => 
+                        `${item.role.toUpperCase()}: ${item.content}`
+                    ).join('\n');
                     contextMessage = `NEURAL CONTEXT:\n${contextParts}\n\nCURRENT TRANSMISSION: ${prompt}\n\nNote: You are an advanced AI assistant in the "Operation Offload" quantum workspace. Respond with technical precision and futuristic terminology when appropriate.`;
                 }
 
+                // Get enhanced AI response
                 const aiResponse = await callGeminiAPI(contextMessage);
-
-                conversationHistory.push({ role: 'user', content: prompt, timestamp: new Date().toISOString(), quantumId: generateQuantumSignature() });
-                conversationHistory.push({ role: 'assistant', content: aiResponse, timestamp: new Date().toISOString(), quantumId: generateQuantumSignature() });
-
-                // Update the loading message with the actual response
-                const contentDiv = loadingMessage.querySelector('p');
-                if(contentDiv) {
-                    contentDiv.parentElement.innerHTML = formatAIResponse(aiResponse);
-                } else {
-                    loadingMessage.innerHTML = formatAIResponse(aiResponse);
-                }
                 
+                // Update conversation history
+                conversationHistory.push({ 
+                    role: 'user', 
+                    content: prompt, 
+                    timestamp: new Date().toISOString(),
+                    quantumId: generateQuantumSignature()
+                });
+                conversationHistory.push({ 
+                    role: 'assistant', 
+                    content: aiResponse, 
+                    timestamp: new Date().toISOString(),
+                    quantumId: generateQuantumSignature()
+                });
+
+                // Update the loading message with enhanced response
+                loadingMessage.innerHTML = `<p>${formatAIResponse(aiResponse)}</p>`;
+
+                // Enhanced conversation saving with metadata
                 await saveEnhancedConversationToDrive();
 
+                // Show quantum success indicator
                 const successIndicator = document.createElement('div');
-                successIndicator.className = 'text-neon-green text-xs mt-2 flex items-center font-mono';
-                successIndicator.innerHTML = '⚡&nbsp;Quantum archived to neural matrix';
+                successIndicator.className = 'text-neon-green text-xs mt-2 flex items-center';
+                successIndicator.innerHTML = '⚡ <span class="ml-1">Quantum archived to neural matrix</span>';
                 loadingMessage.appendChild(successIndicator);
 
-                if (conversationHistory.length > 0 && conversationHistory.length % 6 === 0) {
+                // Auto-categorize and suggest extractions
+                if (conversationHistory.length % 5 === 0) {
                     suggestSmartExtraction();
                 }
 
@@ -345,7 +148,7 @@
             } finally {
                 isProcessing = false;
                 sendButton.disabled = false;
-                sendButton.innerHTML = '⚡TRANSMIT';
+                sendButton.innerHTML = '<span class="mr-2">⚡</span>TRANSMIT';
             }
         };
 
@@ -361,14 +164,17 @@
                     conversationHistory: conversationHistory,
                     metadata: {
                         totalExchanges: Math.floor(conversationHistory.length / 2),
-                        sessionDurationMinutes: calculateSessionDuration(),
+                        sessionDuration: calculateSessionDuration(),
                         neuralComplexity: calculateNeuralComplexity(),
                         exportedBy: 'Operation Offload Quantum Engine',
                         version: '2.0'
                     },
-                    settings: extractionSettings,
-                    analysis: analyzeConversationContent()
+                    settings: extractionSettings
                 };
+
+                // Enhanced content analysis
+                const contentAnalysis = analyzeConversationContent();
+                conversationData.analysis = contentAnalysis;
 
                 await saveToGoogleDrive(JSON.stringify(conversationData, null, 2), filename);
                 console.log('🔵 Neural session archived to quantum matrix');
@@ -376,7 +182,7 @@
                 console.error('🔴 Neural archival failed:', error);
             }
         }
-        
+
         function analyzeConversationContent() {
             const analysis = {
                 detectedContentTypes: [],
@@ -384,8 +190,10 @@
                 topicComplexity: 'standard',
                 suggestedCategories: []
             };
-            const fullText = conversationHistory.map(h => h.content).join(' ').toLowerCase();
 
+            const fullText = conversationHistory.map(h => h.content).join(' ').toLowerCase();
+            
+            // Detect content types based on conversation
             Object.entries(contentTypes).forEach(([type, config]) => {
                 const matches = config.patterns.filter(pattern => fullText.includes(pattern));
                 if (matches.length > 0) {
@@ -397,6 +205,7 @@
                 }
             });
 
+            // Suggest extractions based on detected content
             analysis.detectedContentTypes.forEach(detected => {
                 if (detected.confidence > 0.3) {
                     analysis.potentialExtractions.push({
@@ -406,6 +215,7 @@
                     });
                 }
             });
+
             return analysis;
         }
 
@@ -419,6 +229,7 @@
         function calculateNeuralComplexity() {
             const totalWords = conversationHistory.reduce((sum, h) => sum + h.content.split(' ').length, 0);
             const avgWordsPerMessage = totalWords / Math.max(conversationHistory.length, 1);
+            
             if (avgWordsPerMessage > 100) return 'high';
             if (avgWordsPerMessage > 50) return 'medium';
             return 'standard';
@@ -428,12 +239,14 @@
             const analysis = analyzeConversationContent();
             if (analysis.potentialExtractions.length > 0) {
                 const suggestion = document.createElement('div');
-                suggestion.className = 'w-full flex justify-center mt-4 animate-float';
+                suggestion.className = 'w-full flex justify-center mt-4';
                 suggestion.innerHTML = `
-                    <div class="bg-indigo-900/50 border border-indigo-500 rounded-lg p-3 text-center text-sm">
-                        <p class="font-bold text-indigo-300">🧠 QUANTUM SUGGESTION</p>
-                        <p>Neural patterns detected: <span class="font-semibold">${analysis.potentialExtractions.map(p => p.type).join(', ')}</span></p>
-                        <button class="mt-2 bg-indigo-600 hover:bg-indigo-700 text-white py-1 px-3 rounded-md text-xs">🎯 SMART EXTRACT</button>
+                    <div class="bg-gradient-to-r from-neon-purple to-neon-blue bg-opacity-20 border border-neon-purple border-opacity-30 rounded-xl p-4 max-w-md text-center">
+                        <div class="text-neon-purple mb-2">🧠 QUANTUM SUGGESTION</div>
+                        <div class="text-sm text-gray-300 mb-3">Neural patterns detected: ${analysis.potentialExtractions.map(p => p.type).join(', ')}</div>
+                        <button onclick="smartExtract()" class="bg-gradient-to-r from-neon-purple to-neon-pink text-white text-sm py-2 px-4 rounded-lg font-semibold transition-all duration-300 hover:scale-105">
+                            🎯 SMART EXTRACT
+                        </button>
                     </div>
                 `;
                 chatWindow.appendChild(suggestion);
@@ -441,220 +254,294 @@
             }
         }
 
-        // --- ARCHIVE & DOWNLOAD FUNCTIONS ---
-        function enableArchiveFeatures() {
-            document.getElementById('download-current-chat').disabled = false;
-            document.getElementById('download-all-drive-content').disabled = false;
-            document.getElementById('bulk-download-interactions').disabled = false;
-            document.getElementById('generate-summary-report').disabled = false;
-        }
+        // --- ADVANCED EXTRACTION PROCESSING ---
+        async function processFilesForExtraction(files, category) {
+            const processedFiles = [];
+            
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                updateExtractionProgress(
+                    30 + (40 * (i + 1)) / files.length, 
+                    `🔄 Processing ${file.name}...`
+                );
+                
+                try {
+                    const processedFile = {
+                        originalFile: {
+                            id: file.id,
+                            name: file.name,
+                            created: file.createdTime,
+                            modified: file.modifiedTime,
+                            size: file.size
+                        },
+                        content: file.content || await tryGetFileContent(file.id),
+                        extractionMetadata: {
+                            category: category,
+                            extractedAt: new Date().toISOString(),
+                            quantumSignature: generateQuantumSignature(),
+                            preservedLinks: extractionSettings.preserveLinks,
+                            processingMethod: file.matchReason || 'pattern-match'
+                        }
+                    };
 
-        function disableArchiveFeatures() {
-            document.getElementById('download-current-chat').disabled = true;
-            document.getElementById('download-all-drive-content').disabled = true;
-            document.getElementById('bulk-download-interactions').disabled = true;
-            document.getElementById('generate-summary-report').disabled = true;
-        }
-
-        async function downloadCurrentChat() {
-            if (conversationHistory.length === 0) {
-                alert('No conversation to download!');
-                return;
+                    // Enhanced content processing based on type
+                    processedFile.enhancedContent = await enhanceContentForType(processedFile.content, category);
+                    processedFiles.push(processedFile);
+                    
+                } catch (error) {
+                    console.warn(`⚠️ Failed to process ${file.name}:`, error);
+                    processedFiles.push({
+                        originalFile: { id: file.id, name: file.name, error: error.message },
+                        extractionMetadata: { category: category, failed: true }
+                    });
+                }
             }
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-            const filename = `current-chat-${timestamp}.json`;
-            const chatData = {
-                exportType: 'current-chat',
+            
+            return processedFiles;
+        }
+
+        async function enhanceContentForType(content, type) {
+            if (!content) return null;
+            
+            const enhancements = {
+                links: [],
+                references: [],
+                metadata: {},
+                structure: null
+            };
+
+            try {
+                // Extract links and references
+                const linkRegex = /(https?:\/\/[^\s]+)/g;
+                const matches = content.match(linkRegex);
+                if (matches) {
+                    enhancements.links = matches;
+                }
+
+                // Type-specific enhancements
+                switch (type) {
+                    case 'code':
+                        enhancements.structure = analyzeCodeStructure(content);
+                        break;
+                    case 'webapps':
+                        enhancements.structure = analyzeWebAppStructure(content);
+                        break;
+                    case 'research':
+                        enhancements.structure = analyzeResearchStructure(content);
+                        break;
+                }
+
+                enhancements.metadata = {
+                    wordCount: content.split(/\s+/).length,
+                    lineCount: content.split('\n').length,
+                    characterCount: content.length,
+                    estimatedReadTime: Math.ceil(content.split(/\s+/).length / 200) // minutes
+                };
+
+            } catch (error) {
+                console.warn('Content enhancement failed:', error);
+                enhancements.error = error.message;
+            }
+
+            return enhancements;
+        }
+
+        function analyzeCodeStructure(content) {
+            return {
+                functions: (content.match(/function\s+\w+/g) || []).length,
+                classes: (content.match(/class\s+\w+/g) || []).length,
+                imports: (content.match(/import\s+/g) || []).length,
+                comments: (content.match(/\/\*[\s\S]*?\*\/|\/\/.*$/gm) || []).length
+            };
+        }
+
+        function analyzeWebAppStructure(content) {
+            return {
+                htmlElements: (content.match(/<[^>]+>/g) || []).length,
+                jsCallbacks: (content.match(/addEventListener|onclick|on\w+=/g) || []).length,
+                cssRules: (content.match(/[^{}]+{[^}]*}/g) || []).length,
+                frameworks: detectFrameworks(content)
+            };
+        }
+
+        function analyzeResearchStructure(content) {
+            return {
+                sections: (content.match(/^#{1,6}\s+.+$/gm) || []).length,
+                citations: (content.match(/\[[^\]]+\]/g) || []).length,
+                tables: (content.match(/\|.*\|/g) || []).length,
+                codeBlocks: (content.match(/```[\s\S]*?```/g) || []).length
+            };
+        }
+
+        function detectFrameworks(content) {
+            const frameworks = [];
+            const patterns = {
+                'React': /import.*react|jsx|useState|useEffect/i,
+                'Vue': /vue|v-if|v-for|<template>/i,
+                'Angular': /angular|\@Component|\@Injectable/i,
+                'jQuery': /jquery|\$\(/i,
+                'Bootstrap': /bootstrap|btn-|col-|row/i,
+                'Tailwind': /tailwind|bg-|text-|flex-/i
+            };
+
+            Object.entries(patterns).forEach(([name, pattern]) => {
+                if (pattern.test(content)) {
+                    frameworks.push(name);
+                }
+            });
+
+            return frameworks;
+        }
+
+        function generateExtractionManifest(extractedContent, type) {
+            return {
+                manifestVersion: '2.0',
+                extractionType: type,
                 timestamp: new Date().toISOString(),
-                conversationHistory: conversationHistory,
+                quantumSignature: generateQuantumSignature(),
+                summary: {
+                    totalFiles: extractedContent.length,
+                    successfulExtractions: extractedContent.filter(f => !f.extractionMetadata?.failed).length,
+                    failedExtractions: extractedContent.filter(f => f.extractionMetadata?.failed).length,
+                    totalSize: extractedContent.reduce((sum, f) => sum + (parseInt(f.originalFile?.size) || 0), 0)
+                },
+                fileIndex: extractedContent.map((file, index) => ({
+                    index: index,
+                    name: file.originalFile?.name,
+                    id: file.originalFile?.id,
+                    quantumSignature: file.extractionMetadata?.quantumSignature,
+                    links: file.enhancedContent?.links || [],
+                    relatedFiles: [] // Could be populated by analyzing content relationships
+                })),
+                settings: extractionSettings
+            };
+        }
+
+        async function generateSmartExtractionPackage(categorizedFiles) {
+            const smartPackage = {
+                extractionType: 'smart-ai-powered',
+                timestamp: new Date().toISOString(),
+                quantumSignature: generateQuantumSignature(),
+                aiAnalysis: {
+                    totalFilesAnalyzed: Object.values(categorizedFiles).flat().length,
+                    confidenceDistribution: calculateConfidenceDistribution(categorizedFiles),
+                    detectedPatterns: analyzeDetectedPatterns(categorizedFiles),
+                    recommendations: generateExtractionRecommendations(categorizedFiles)
+                },
+                categorizedContent: {},
+                crossReferences: generateCrossReferences(categorizedFiles),
                 metadata: {
-                    totalMessages: conversationHistory.length,
-                    exportedBy: 'Operation Offload',
-                    version: '2.0'
+                    processingTime: Date.now(),
+                    aiVersion: 'Gemini-1.5-Flash',
+                    quantumEngine: 'Operation Offload v2.0'
                 }
             };
-            downloadJSON(chatData, filename);
-            updateDownloadStatus(`Current chat exported as ${filename}`);
-        }
 
-        async function downloadAllDriveContent() {
-            if (!DRIVE_FOLDER_ID) { alert('Drive folder not initialized!'); return; }
-            showProgress(true);
-            updateProgress(0, 'Scanning Google Drive folder...');
-            try {
-                const files = await getAllDriveFiles();
-                updateProgress(30, `Found ${files.length} files. Downloading content...`);
-                const allContent = [];
-                for (let i = 0; i < files.length; i++) {
-                    const file = files[i];
-                    updateProgress(30 + (50 * (i + 1)) / files.length, `Downloading: ${file.name}`);
-                    try {
-                        const content = await downloadDriveFile(file.id);
-                        allContent.push({
-                            filename: file.name,
-                            createdTime: file.createdTime,
-                            modifiedTime: file.modifiedTime,
-                            size: file.size,
-                            content: content
-                        });
-                    } catch (error) {
-                        console.warn(`Failed to download ${file.name}:`, error);
-                        allContent.push({
-                            filename: file.name,
-                            createdTime: file.createdTime,
-                            error: error.message
-                        });
-                    }
+            // Process each category
+            for (const [type, files] of Object.entries(categorizedFiles)) {
+                if (files.length > 0) {
+                    smartPackage.categorizedContent[type] = await processFilesForExtraction(files, type);
                 }
-                updateProgress(90, 'Preparing download package...');
-                const archiveData = {
-                    exportType: 'drive-archive',
-                    timestamp: new Date().toISOString(),
-                    folderName: 'Gemini_Synapse_Offload',
-                    totalFiles: files.length,
-                    files: allContent,
-                };
-                const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-                const filename = `drive-archive-${timestamp}.json`;
-                downloadJSON(archiveData, filename);
-                updateProgress(100, `Complete! Downloaded ${files.length} files.`);
-                updateDownloadStatus(`Drive archive exported as ${filename}`);
-            } catch (error) {
-                console.error('Error downloading drive content:', error);
-                updateDownloadStatus(`Error: ${error.message}`, 'text-red-400');
-            } finally {
-                setTimeout(() => showProgress(false), 2000);
             }
+
+            return smartPackage;
         }
 
-        async function bulkDownloadInteractions() {
-            if (!DRIVE_FOLDER_ID) { alert('Drive folder not initialized!'); return; }
-            showProgress(true);
-            updateProgress(0, 'Gathering all interaction data...');
-            try {
-                const files = await getAllDriveFiles();
-                const conversationFiles = files.filter(file => file.name.includes('neural_session') || file.name.endsWith('.json'));
-                updateProgress(20, `Found ${conversationFiles.length} conversation files.`);
-                const allInteractions = [];
-                for (let i = 0; i < conversationFiles.length; i++) {
-                    const file = conversationFiles[i];
-                    updateProgress(20 + (60 * (i + 1)) / conversationFiles.length, `Processing: ${file.name}`);
-                    try {
-                        const content = await downloadDriveFile(file.id);
-                        allInteractions.push(JSON.parse(content));
-                    } catch (error) {
-                        console.warn(`Failed to process ${file.name}:`, error);
-                    }
+        function calculateConfidenceDistribution(categorizedFiles) {
+            const distribution = { high: 0, medium: 0, low: 0 };
+            
+            Object.values(categorizedFiles).flat().forEach(file => {
+                const confidence = file.confidence || 0.5;
+                if (confidence > 0.7) distribution.high++;
+                else if (confidence > 0.4) distribution.medium++;
+                else distribution.low++;
+            });
+            
+            return distribution;
+        }
+
+        function analyzeDetectedPatterns(categorizedFiles) {
+            const patterns = {};
+            
+            Object.entries(categorizedFiles).forEach(([type, files]) => {
+                patterns[type] = {
+                    count: files.length,
+                    averageConfidence: files.reduce((sum, f) => sum + (f.confidence || 0.5), 0) / Math.max(files.length, 1),
+                    primaryPatterns: [...new Set(files.map(f => f.matchReason).filter(Boolean))]
+                };
+            });
+            
+            return patterns;
+        }
+
+        function generateExtractionRecommendations(categorizedFiles) {
+            const recommendations = [];
+            
+            Object.entries(categorizedFiles).forEach(([type, files]) => {
+                if (files.length > 5) {
+                    recommendations.push({
+                        type: 'bulk-extraction',
+                        category: type,
+                        priority: 'high',
+                        reason: `Large collection of ${files.length} ${type} files detected`
+                    });
                 }
-                updateProgress(90, 'Generating comprehensive export...');
-                const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-                const filename = `bulk-interactions-${timestamp}.json`;
-                downloadJSON({ exportType: 'bulk-interactions', interactions: allInteractions }, filename);
-                updateProgress(100, `Exported ${conversationFiles.length} interactions!`);
-                updateDownloadStatus(`Bulk export completed: ${filename}`);
-            } catch (error) {
-                console.error('Error in bulk download:', error);
-                updateDownloadStatus(`Error: ${error.message}`, 'text-red-400');
-            } finally {
-                setTimeout(() => showProgress(false), 2000);
-            }
+                
+                const highConfidenceFiles = files.filter(f => (f.confidence || 0.5) > 0.8);
+                if (highConfidenceFiles.length > 0) {
+                    recommendations.push({
+                        type: 'priority-extraction',
+                        category: type,
+                        priority: 'medium',
+                        reason: `${highConfidenceFiles.length} high-confidence ${type} files ready for extraction`
+                    });
+                }
+            });
+            
+            return recommendations;
         }
 
-        async function generateSummaryReport() {
-            if (!DRIVE_FOLDER_ID) { alert('Drive folder not initialized!'); return; }
-            showProgress(true);
-            updateProgress(0, 'Analyzing all content...');
-            try {
-                const files = await getAllDriveFiles();
-                updateProgress(20, `Analyzing ${files.length} files...`);
-                const report = {
-                    exportType: 'summary-report',
-                    timestamp: new Date().toISOString(),
-                    overview: {
-                        totalFiles: files.length,
-                        totalSize: files.reduce((sum, f) => sum + (parseInt(f.size) || 0), 0),
-                        fileTypes: {}
-                    },
-                    recentActivity: files.slice(0, 10).map(f => ({ name: f.name, created: f.createdTime, size: f.size }))
-                };
-                 files.forEach(file => {
-                    const extension = file.name.split('.').pop().toLowerCase();
-                    report.overview.fileTypes[extension] = (report.overview.fileTypes[extension] || 0) + 1;
+        function generateCrossReferences(categorizedFiles) {
+            const references = {};
+            
+            // Simple cross-referencing based on file names and content
+            Object.entries(categorizedFiles).forEach(([type, files]) => {
+                files.forEach(file => {
+                    if (file.content) {
+                        const refs = [];
+                        
+                        // Look for references to other files
+                        Object.entries(categorizedFiles).forEach(([otherType, otherFiles]) => {
+                            if (type !== otherType) {
+                                otherFiles.forEach(otherFile => {
+                                    if (file.content.includes(otherFile.name.split('.')[0])) {
+                                        refs.push({
+                                            targetType: otherType,
+                                            targetFile: otherFile.name,
+                                            relationship: 'name-reference'
+                                        });
+                                    }
+                                });
+                            }
+                        });
+                        
+                        if (refs.length > 0) {
+                            references[file.id] = refs;
+                        }
+                    }
                 });
-                updateProgress(100, 'Report generated successfully!');
-                const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-                const filename = `summary-report-${timestamp}.json`;
-                downloadJSON(report, filename);
-                updateDownloadStatus(`Summary report generated: ${filename}`);
-            } catch (error) {
-                console.error('Error generating summary:', error);
-                updateDownloadStatus(`Error: ${error.message}`, 'text-red-400');
-            } finally {
-                setTimeout(() => showProgress(false), 2000);
-            }
+            });
+            
+            return references;
         }
 
-        // --- HELPER FUNCTIONS FOR DOWNLOADS & UTILS ---
-        async function getAllDriveFiles() {
-            try {
-                const response = await gapi.client.drive.files.list({
-                    q: `parents in '${DRIVE_FOLDER_ID}' and trashed=false`,
-                    fields: 'files(id, name, createdTime, modifiedTime, size)',
-                    orderBy: 'createdTime desc'
-                });
-                return response.result.files || [];
-            } catch (error) {
-                throw new Error(`Failed to list files: ${error.result.error.message}`);
-            }
-        }
-
-        async function downloadDriveFile(fileId) {
-            try {
-                const response = await gapi.client.drive.files.get({
-                    fileId: fileId,
-                    alt: 'media'
-                });
-                return response.body;
-            } catch (error) {
-                throw new Error(`Failed to download file: ${error.result.error.message}`);
-            }
-        }
-
-        function downloadJSON(data, filename) {
-            const jsonString = JSON.stringify(data, null, 2);
-            const blob = new Blob([jsonString], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-        }
-
-        function showProgress(show) {
-            document.getElementById('download-progress').classList.toggle('hidden', !show);
-        }
-
-        function updateProgress(percent, text) {
-            document.getElementById('progress-bar').style.width = `${percent}%`;
-            document.getElementById('progress-text').textContent = text;
-        }
-
-        function updateDownloadStatus(message, className = 'text-green-400') {
-            const statusDiv = document.getElementById('download-status');
-            statusDiv.textContent = message;
-            statusDiv.className = `text-sm ${className}`;
-        }
-        
+        // --- ENHANCED UTILITY FUNCTIONS ---
         function formatAIResponse(text) {
-             // Basic formatting for AI responses
-             return escapeHtml(text)
-                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                .replace(/\*(.*?)\*/g, '<em>$1</em>')
-                .replace(/`(.*?)`/g, '<code class="bg-gray-700 text-teal-300 px-1 rounded">$1</code>')
-                .replace(/```([\s\S]*?)```/g, '<pre class="code-block bg-black p-2 rounded-md my-2"><code>$1</code></pre>')
+            return escapeHtml(text)
+                .replace(/\*\*(.*?)\*\*/g, '<strong class="text-neon-blue">$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em class="text-neon-purple">$1</em>')
+                .replace(/`(.*?)`/g, '<code class="bg-gray-700 px-2 py-1 rounded text-neon-green font-mono text-sm">$1</code>')
+                .replace(/```([\s\S]*?)```/g, '<pre class="bg-gray-800 p-4 rounded-lg mt-2 mb-2 font-mono text-sm border border-neon-blue border-opacity-30"><code class="text-neon-green">$1</code></pre>')
                 .replace(/\n/g, '<br>');
         }
 
@@ -664,55 +551,69 @@
             return div.innerHTML;
         }
 
-        function generateQuantumSignature() {
-             return 'qs-' + Date.now().toString(36) + '-' + Math.random().toString(36).substr(2, 9);
-        }
-
-        function generateTimestamp() {
-            return new Date().toISOString().replace(/[:.]/g, '-');
-        }
-
-        // --- GOOGLE DRIVE FUNCTIONS ---
-        async function findOrCreateFolder(folderName) {
-            const searchResponse = await gapi.client.drive.files.list({
-                q: `name='${folderName}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
-                fields: 'files(id, name)'
-            });
-            if (searchResponse.result.files && searchResponse.result.files.length > 0) {
-                console.log(`Found existing folder: ${folderName}`);
-                return searchResponse.result.files[0].id;
-            }
-            const createResponse = await gapi.client.drive.files.create({
-                resource: { name: folderName, mimeType: 'application/vnd.google-apps.folder' },
-                fields: 'id'
-            });
-            console.log(`Created new folder: ${folderName}`);
-            return createResponse.result.id;
-        }
-
         async function saveToGoogleDrive(content, filename) {
-            if (!DRIVE_FOLDER_ID) throw new Error('Drive folder not initialized');
-            const boundary = '-------314159265358979323846';
-            const delimiter = `\r\n--${boundary}\r\n`;
-            const close_delim = `\r\n--${boundary}--`;
-            const metadata = { name: filename, parents: [DRIVE_FOLDER_ID] };
-            const multipartRequestBody =
-                delimiter + 'Content-Type: application/json\r\n\r\n' + JSON.stringify(metadata) +
-                delimiter + 'Content-Type: application/json; charset=UTF-8\r\n\r\n' + content +
-                close_delim;
-            const request = await gapi.client.request({
-                path: 'https://www.googleapis.com/upload/drive/v3/files',
-                method: 'POST',
-                params: { uploadType: 'multipart' },
-                headers: { 'Content-Type': `multipart/related; boundary="${boundary}"` },
-                body: multipartRequestBody
-            });
-            console.log('File saved to Drive:', request.result);
-            return request.result;
+            if (!DRIVE_FOLDER_ID) {
+                throw new Error('Quantum drive matrix not initialized');
+            }
+
+            try {
+                const boundary = '-------314159265358979323846';
+                const delimiter = "\r\n--" + boundary + "\r\n";
+                const close_delim = "\r\n--" + boundary + "--";
+
+                const metadata = {
+                    name: filename,
+                    parents: [DRIVE_FOLDER_ID]
+                };
+
+                const multipartRequestBody =
+                    delimiter +
+                    'Content-Type: application/json\r\n\r\n' +
+                    JSON.stringify(metadata) +
+                    delimiter +
+                    'Content-Type: text/plain\r\n\r\n' +
+                    content +
+                    close_delim;
+
+                const request = gapi.client.request({
+                    path: 'https://www.googleapis.com/upload/drive/v3/files',
+                    method: 'POST',
+                    params: { uploadType: 'multipart' },
+                    headers: {
+                        'Content-Type': `multipart/related; boundary="${boundary}"`
+                    },
+                    body: multipartRequestBody
+                });
+
+                const response = await request;
+                console.log('⚡ File quantum-archived to neural matrix:', response.result);
+                return response.result;
+            } catch (error) {
+                console.error('❌ Quantum archival failed:', error);
+                throw new Error(`Failed to archive to quantum matrix: ${error.message}`);
+            }
+        }
+
+        function downloadJSON(data, filename) {
+            const jsonString = JSON.stringify(data, null, 2);
+            const blob = new Blob([jsonString], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.style.display = 'none';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            showQuantumNotification(`📥 ${filename} downloaded to quantum storage`, 'neon-green');
         }
 
         // --- EVENT LISTENERS ---
         sendButton.addEventListener('click', sendMessage);
+        
         promptInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -720,17 +621,1296 @@
             }
         });
 
+        // Auto-resize textarea with enhanced effects
         promptInput.addEventListener('input', function() {
             this.style.height = 'auto';
-            this.style.height = (this.scrollHeight) + 'px';
+            this.style.height = Math.min(this.scrollHeight, 200) + 'px';
         });
 
-        document.getElementById('download-current-chat').addEventListener('click', downloadCurrentChat);
-        document.getElementById('download-all-drive-content').addEventListener('click', downloadAllDriveContent);
-        document.getElementById('bulk-download-interactions').addEventListener('click', bulkDownloadInteractions);
-        document.getElementById('generate-summary-report').addEventListener('click', generateSummaryReport);
+        // Settings event listeners
+        document.getElementById('save-settings').addEventListener('click', () => {
+            saveSettings();
+            showQuantumNotification('⚙️ Quantum preferences synchronized', 'neon-blue');
+        });
 
-        console.log("Operation Offload initialized with full quantum archive capabilities!");
+        document.getElementById('close-settings').addEventListener('click', () => {
+            settingsPanel.classList.add('hidden');
+        });
+
+        // Individual extraction event listeners
+        document.getElementById('download-canvas').addEventListener('click', () => extractContentByType('canvas'));
+        document.getElementById('download-research').addEventListener('click', () => extractContentByType('research'));
+        document.getElementById('download-webapps').addEventListener('click', () => extractContentByType('webapps'));
+        document.getElementById('download-code').addEventListener('click', () => extractContentByType('code'));
+        document.getElementById('download-media').addEventListener('click', () => extractContentByType('media'));
+        document.getElementById('download-chats').addEventListener('click', () => extractContentByType('chats'));
+        document.getElementById('download-documents').addEventListener('click', () => extractContentByType('documents'));
+        document.getElementById('download-analytics').addEventListener('click', () => extractContentByType('analytics'));
+
+        // Bulk extraction event listeners
+        document.getElementById('bulk-extract-all').addEventListener('click', bulkExtractAll);
+        document.getElementById('smart-extract').addEventListener('click', smartExtract);
+        document.getElementById('custom-extract').addEventListener('click', customExtract);
+
+        // Location selector modal event listeners
+        document.getElementById('close-location-modal').addEventListener('click', () => {
+            document.getElementById('location-selector-modal').classList.add('hidden');
+        });
+
+        document.getElementById('reset-paths').addEventListener('click', () => {
+            // Reset to defaults
+            extractionSettings.defaultPaths = {
+                canvas: '/Canvas/',
+                research: '/Research/',
+                webapps: '/WebApps/',
+                code: '/Code/',
+                media: '/Media/',
+                chats: '/Conversations/',
+                documents: '/Documents/',
+                analytics: '/Analytics/'
+            };
+            populateExtractionPaths();
+            updateExtractionPreview();
+            showQuantumNotification('🔄 Paths reset to quantum defaults', 'neon-blue');
+        });
+
+        document.getElementById('confirm-extraction').addEventListener('click', async () => {
+            // Update paths from UI
+            document.querySelectorAll('input[data-type]').forEach(input => {
+                const type = input.dataset.type;
+                extractionSettings.defaultPaths[type] = input.value;
+            });
+            
+            document.getElementById('location-selector-modal').classList.add('hidden');
+            
+            // Execute the appropriate extraction
+            if (currentExtractionType === 'bulk-all') {
+                await executeBulkExtractionAll();
+            } else if (currentExtractionType === 'custom') {
+                await executeCustomExtraction();
+            }
+        });
+
+        // Initialize settings from storage
+        const savedSettings = sessionStorage.getItem('offload_settings');
+        if (savedSettings) {
+            try {
+                extractionSettings = { ...extractionSettings, ...JSON.parse(savedSettings) };
+            } catch (error) {
+                console.warn('Failed to load saved settings:', error);
+            }
+        }
+
+        async function executeBulkExtractionAll() {
+            showExtractionProgress(true);
+            updateExtractionProgress(0, '🚀 Initiating complete quantum extraction protocol...');
+
+            try {
+                const files = await getAllDriveFiles();
+                updateExtractionProgress(10, '🔍 Quantum scanning complete. Categorizing neural patterns...');
+                
+                const categorizedFiles = await categorizeFiles(files);
+                const totalFiles = Object.values(categorizedFiles).flat().length;
+                
+                updateExtractionProgress(30, `📊 ${totalFiles} files categorized. Initiating bulk processing...`);
+                
+                const bulkPackage = {
+                    extractionType: 'complete-bulk-extraction',
+                    timestamp: new Date().toISOString(),
+                    quantumSignature: generateQuantumSignature(),
+                    categories: {},
+                    masterIndex: {},
+                    settings: extractionSettings,
+                    metadata: {
+                        totalFiles: totalFiles,
+                        extractedBy: 'Operation Offload Quantum Engine v2.0',
+                        bulkExtractionLevel: 'maximum'
+                    }
+                };
+
+                let processedCount = 0;
+                for (const [type, files] of Object.entries(categorizedFiles)) {
+                    if (files.length > 0) {
+                        updateExtractionProgress(
+                            30 + (50 * processedCount) / Object.keys(categorizedFiles).length,
+                            `⚡ Processing ${type}: ${files.length} files...`
+                        );
+                        
+                        bulkPackage.categories[type] = await processFilesForExtraction(files, type);
+                        bulkPackage.masterIndex[type] = generateCategoryIndex(bulkPackage.categories[type], type);
+                        processedCount++;
+                    }
+                }
+
+                updateExtractionProgress(85, '🧠 Generating quantum cross-references...');
+                bulkPackage.crossReferences = generateAdvancedCrossReferences(bulkPackage.categories);
+                
+                updateExtractionProgress(95, '📦 Quantum packaging complete...');
+                const timestamp = generateTimestamp();
+                const filename = `${extractionSettings.filePrefix}COMPLETE_EXTRACTION_${timestamp}.json`;
+                
+                downloadJSON(bulkPackage, filename);
+                updateExtractionProgress(100, '🎉 Complete quantum extraction successful!');
+                showQuantumNotification('🚀 Complete extraction archived to quantum matrix!', 'neon-green');
+
+            } catch (error) {
+                console.error('❌ Bulk extraction failed:', error);
+                showQuantumNotification(`❌ Bulk extraction failed: ${error.message}`, 'neon-pink');
+            } finally {
+                setTimeout(() => showExtractionProgress(false), 4000);
+            }<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Operation Offload: Advanced AI Workspace</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'neon-blue': '#00f5ff',
+                        'neon-green': '#39ff14',
+                        'neon-pink': '#ff073a',
+                        'neon-purple': '#bf00ff',
+                        'cyber-dark': '#0a0a0f',
+                        'cyber-gray': '#1a1a2e',
+                        'cyber-light': '#16213e'
+                    },
+                    fontFamily: {
+                        'cyber': ['Inter', 'sans-serif']
+                    },
+                    animation: {
+                        'pulse-neon': 'pulse-neon 2s ease-in-out infinite alternate',
+                        'float': 'float 3s ease-in-out infinite',
+                        'glow': 'glow 2s ease-in-out infinite alternate',
+                        'matrix-rain': 'matrix-rain 20s linear infinite',
+                        'data-stream': 'data-stream 15s linear infinite',
+                    }
+                }
+            }
+        }
     </script>
-</body>
-</html>
+    <style>
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background: linear-gradient(135deg, #0a0a0f 0%, #1a1a2e 50%, #16213e 100%);
+            color: #f3f4f6;
+            overflow-x: hidden;
+        }
+        
+        .cyber-grid {
+            background-image: 
+                radial-gradient(circle at 1px 1px, rgba(0, 245, 255, 0.2) 1px, transparent 0);
+            background-size: 20px 20px;
+        }
+        
+        .neon-border {
+            border: 2px solid transparent;
+            background: linear-gradient(45deg, #00f5ff, #bf00ff) border-box;
+            border-radius: 12px;
+            position: relative;
+        }
+        
+        .neon-glow {
+            box-shadow: 
+                0 0 20px rgba(0, 245, 255, 0.3),
+                0 0 40px rgba(0, 245, 255, 0.1),
+                inset 0 0 20px rgba(0, 245, 255, 0.05);
+        }
+        
+        .hologram {
+            background: linear-gradient(45deg, 
+                rgba(0, 245, 255, 0.1) 0%, 
+                rgba(191, 0, 255, 0.1) 50%, 
+                rgba(57, 255, 20, 0.1) 100%
+            );
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(0, 245, 255, 0.2);
+        }
+        
+        .data-stream {
+            background: linear-gradient(90deg, 
+                transparent 0%, 
+                rgba(0, 245, 255, 0.3) 50%, 
+                transparent 100%
+            );
+            animation: data-stream 3s ease-in-out infinite;
+        }
+        
+        @keyframes pulse-neon {
+            from { box-shadow: 0 0 20px rgba(0, 245, 255, 0.5); }
+            to { box-shadow: 0 0 30px rgba(0, 245, 255, 0.8), 0 0 40px rgba(191, 0, 255, 0.3); }
+        }
+        
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+        
+        @keyframes glow {
+            from { text-shadow: 0 0 10px rgba(0, 245, 255, 0.5); }
+            to { text-shadow: 0 0 20px rgba(0, 245, 255, 0.8), 0 0 30px rgba(191, 0, 255, 0.3); }
+        }
+        
+        @keyframes data-stream {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+        
+        .chat-bubble-user { 
+            background: linear-gradient(135deg, #1f2937 0%, #374151 100%);
+            border: 1px solid rgba(0, 245, 255, 0.3);
+        }
+        
+        .chat-bubble-ai { 
+            background: linear-gradient(135deg, #374151 0%, #4b5563 100%);
+            border: 1px solid rgba(191, 0, 255, 0.3);
+        }
+        
+        .download-category {
+            background: linear-gradient(135deg, rgba(0, 245, 255, 0.1) 0%, rgba(191, 0, 255, 0.1) 100%);
+            border: 1px solid rgba(0, 245, 255, 0.2);
+            backdrop-filter: blur(5px);
+            transition: all 0.3s ease;
+        }
+        
+        .download-category:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0, 245, 255, 0.2);
+            border-color: rgba(0, 245, 255, 0.4);
+        }
+        
+        .code-block { font-family: 'Roboto Mono', monospace; }
+        
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: rgba(26, 26, 46, 0.5); }
+        ::-webkit-scrollbar-thumb { 
+            background: linear-gradient(45deg, #00f5ff, #bf00ff); 
+            border-radius: 4px; 
+        }
+        
+        .matrix-rain::before {
+            content: "01001000 01100101 01101100 01101100 01101111";
+            position: absolute;
+            top: -20px;
+            left: 0;
+            right: 0;
+            color: rgba(57, 255, 20, 0.3);
+            font-family: 'Roboto Mono', monospace;
+            font-size: 10px;
+            animation: matrix-rain 20s linear infinite;
+        }
+        
+        .settings-panel {
+            background: linear-gradient(135deg, rgba(10, 10, 15, 0.95) 0%, rgba(26, 26, 46, 0.95) 100%);
+            backdrop-filter: blur(20px);
+            border: 2px solid rgba(0, 245, 255, 0.3);
+        }
+        
+        .file-type-badge {
+            background: linear-gradient(45deg, rgba(0, 245, 255, 0.2), rgba(191, 0, 255, 0.2));
+            border: 1px solid rgba(0, 245, 255, 0.4);
+        }
+        
+        .extraction-preview {
+            background: rgba(0, 0, 0, 0.7);
+            border: 1px solid rgba(57, 255, 20, 0.3);
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-cyber-dark via-cyber-gray to-cyber-light text-gray-200 cyber-grid">
+    
+    <!-- Background Effects -->
+    <div class="fixed inset-0 pointer-events-none overflow-hidden">
+        <div class="absolute top-20 left-20 w-96 h-96 bg-neon-blue opacity-5 rounded-full blur-3xl animate-pulse-neon"></div>
+        <div class="absolute bottom-20 right-20 w-96 h-96 bg-neon-purple opacity-5 rounded-full blur-3xl animate-pulse-neon" style="animation-delay: 1s;"></div>
+        <div class="absolute top-1/2 left-1/2 w-96 h-96 bg-neon-green opacity-3 rounded-full blur-3xl animate-pulse-neon" style="animation-delay: 2s;"></div>
+    </div>
+
+    <div class="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Header -->
+        <header class="text-center mb-12 relative">
+            <div class="matrix-rain absolute inset-0"></div>
+            <h1 class="text-5xl md:text-6xl font-black tracking-tight text-white animate-glow mb-4">
+                <span class="bg-gradient-to-r from-neon-blue via-neon-purple to-neon-green bg-clip-text text-transparent">
+                    OPERATION OFFLOAD
+                </span>
+            </h1>
+            <div class="data-stream h-1 mb-4"></div>
+            <p class="text-xl text-gray-300 max-w-3xl mx-auto">
+                Advanced AI Workspace with <span class="text-neon-blue font-semibold">Quantum-Level</span> 
+                Content Extraction & <span class="text-neon-purple font-semibold">Neural</span> Archive Management
+            </p>
+            <div class="mt-6 flex justify-center space-x-4">
+                <div class="px-4 py-2 bg-gradient-to-r from-neon-blue to-neon-purple bg-opacity-20 rounded-full text-sm">
+                    🚀 AI-Powered
+                </div>
+                <div class="px-4 py-2 bg-gradient-to-r from-neon-purple to-neon-pink bg-opacity-20 rounded-full text-sm">
+                    🛡️ Secure
+                </div>
+                <div class="px-4 py-2 bg-gradient-to-r from-neon-green to-neon-blue bg-opacity-20 rounded-full text-sm">
+                    ⚡ Quantum-Fast
+                </div>
+            </div>
+        </header>
+
+        <!-- Authentication Section -->
+        <div id="auth-section" class="hologram rounded-2xl p-8 mb-8 text-center neon-glow animate-float">
+            <h2 class="text-2xl font-bold text-neon-blue mb-6 flex items-center justify-center">
+                <span class="mr-3">🔐</span> NEURAL AUTHENTICATION MATRIX
+            </h2>
+            <p id="auth-status" class="text-yellow-400 mb-6 text-lg">Initializing quantum authentication protocols...</p>
+            
+            <div class="flex flex-col sm:flex-row gap-4 justify-center items-center">
+                <button id="authorize_button" disabled class="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-bold py-3 px-8 rounded-xl disabled:from-gray-600 disabled:to-gray-500 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 neon-glow">
+                    <span class="mr-2">🌐</span> SYNC WITH GOOGLE MATRIX
+                </button>
+                <button id="signout_button" class="hidden bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-500 hover:to-pink-500 text-white font-bold py-3 px-8 rounded-xl transition-all duration-300 transform hover:scale-105">
+                    <span class="mr-2">🔓</span> DISCONNECT
+                </button>
+                <button id="settings-button" class="bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-500 hover:to-gray-600 text-white font-bold py-3 px-8 rounded-xl transition-all duration-300 transform hover:scale-105">
+                    <span class="mr-2">⚙️</span> SETTINGS
+                </button>
+            </div>
+            
+            <div id="drive-status" class="mt-4 text-sm text-neon-green"></div>
+        </div>
+
+        <!-- Settings Panel (Hidden by default) -->
+        <div id="settings-panel" class="hidden settings-panel rounded-2xl p-6 mb-8">
+            <h3 class="text-xl font-bold text-neon-blue mb-6 flex items-center">
+                <span class="mr-3">⚙️</span> EXTRACTION PREFERENCES
+            </h3>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div class="space-y-4">
+                    <h4 class="text-neon-purple font-semibold">📁 DEFAULT LOCATIONS</h4>
+                    <div class="space-y-2 text-sm">
+                        <div>
+                            <label class="block text-gray-300 mb-1">Canvas Files:</label>
+                            <input type="text" id="canvas-path" value="/Canvas/" class="w-full bg-gray-800 border border-neon-blue border-opacity-30 rounded px-3 py-2 text-white">
+                        </div>
+                        <div>
+                            <label class="block text-gray-300 mb-1">Research Reports:</label>
+                            <input type="text" id="research-path" value="/Research/" class="w-full bg-gray-800 border border-neon-purple border-opacity-30 rounded px-3 py-2 text-white">
+                        </div>
+                        <div>
+                            <label class="block text-gray-300 mb-1">Web Apps:</label>
+                            <input type="text" id="webapp-path" value="/WebApps/" class="w-full bg-gray-800 border border-neon-green border-opacity-30 rounded px-3 py-2 text-white">
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="space-y-4">
+                    <h4 class="text-neon-purple font-semibold">🏷️ NAMING PATTERNS</h4>
+                    <div class="space-y-2 text-sm">
+                        <div>
+                            <label class="block text-gray-300 mb-1">File Prefix:</label>
+                            <input type="text" id="file-prefix" value="OffloadAI_" class="w-full bg-gray-800 border border-neon-blue border-opacity-30 rounded px-3 py-2 text-white">
+                        </div>
+                        <div>
+                            <label class="block text-gray-300 mb-1">Date Format:</label>
+                            <select id="date-format" class="w-full bg-gray-800 border border-neon-purple border-opacity-30 rounded px-3 py-2 text-white">
+                                <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+                                <option value="MM-DD-YYYY">MM-DD-YYYY</option>
+                                <option value="DD-MM-YYYY">DD-MM-YYYY</option>
+                                <option value="timestamp">Unix Timestamp</option>
+                            </select>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <input type="checkbox" id="include-time" checked class="text-neon-blue">
+                            <label class="text-gray-300">Include Time</label>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="space-y-4">
+                    <h4 class="text-neon-purple font-semibold">🔗 LINKING SYSTEM</h4>
+                    <div class="space-y-2 text-sm">
+                        <div class="flex items-center space-x-2">
+                            <input type="checkbox" id="preserve-links" checked class="text-neon-blue">
+                            <label class="text-gray-300">Preserve Origin Links</label>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <input type="checkbox" id="generate-index" checked class="text-neon-blue">
+                            <label class="text-gray-300">Generate Master Index</label>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <input type="checkbox" id="create-manifest" checked class="text-neon-blue">
+                            <label class="text-gray-300">Create Extraction Manifest</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="flex justify-end mt-6 space-x-4">
+                <button id="save-settings" class="bg-gradient-to-r from-neon-green to-neon-blue text-black font-bold py-2 px-6 rounded-lg transition-all duration-300 hover:scale-105">
+                    💾 SAVE SETTINGS
+                </button>
+                <button id="close-settings" class="bg-gradient-to-r from-gray-600 to-gray-700 text-white font-bold py-2 px-6 rounded-lg transition-all duration-300 hover:scale-105">
+                    ❌ CLOSE
+                </button>
+            </div>
+        </div>
+
+        <!-- Advanced Download Categories -->
+        <div id="download-matrix" class="hidden mb-8">
+            <h2 class="text-3xl font-bold text-center mb-8">
+                <span class="bg-gradient-to-r from-neon-blue via-neon-purple to-neon-green bg-clip-text text-transparent">
+                    🎯 QUANTUM EXTRACTION MATRIX
+                </span>
+            </h2>
+            
+            <!-- Individual Category Downloads -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div class="download-category rounded-xl p-6 text-center">
+                    <div class="text-4xl mb-4">🎨</div>
+                    <h3 class="text-lg font-bold text-neon-blue mb-2">CANVAS</h3>
+                    <p class="text-sm text-gray-400 mb-4">Creative artifacts & visual content</p>
+                    <button id="download-canvas" class="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white py-2 px-4 rounded-lg font-semibold transition-all duration-300 hover:scale-105 disabled:from-gray-600 disabled:to-gray-500" disabled>
+                        EXTRACT
+                    </button>
+                    <div class="file-type-badge text-xs mt-2 px-2 py-1 rounded-full">
+                        HTML, SVG, Images
+                    </div>
+                </div>
+                
+                <div class="download-category rounded-xl p-6 text-center">
+                    <div class="text-4xl mb-4">📊</div>
+                    <h3 class="text-lg font-bold text-neon-purple mb-2">RESEARCH</h3>
+                    <p class="text-sm text-gray-400 mb-4">Deep analysis reports & data</p>
+                    <button id="download-research" class="w-full bg-gradient-to-r from-blue-600 to-cyan-600 text-white py-2 px-4 rounded-lg font-semibold transition-all duration-300 hover:scale-105 disabled:from-gray-600 disabled:to-gray-500" disabled>
+                        EXTRACT
+                    </button>
+                    <div class="file-type-badge text-xs mt-2 px-2 py-1 rounded-full">
+                        PDF, DOCX, MD
+                    </div>
+                </div>
+                
+                <div class="download-category rounded-xl p-6 text-center">
+                    <div class="text-4xl mb-4">🌐</div>
+                    <h3 class="text-lg font-bold text-neon-green mb-2">WEB APPS</h3>
+                    <p class="text-sm text-gray-400 mb-4">Interactive applications & tools</p>
+                    <button id="download-webapps" class="w-full bg-gradient-to-r from-green-600 to-teal-600 text-white py-2 px-4 rounded-lg font-semibold transition-all duration-300 hover:scale-105 disabled:from-gray-600 disabled:to-gray-500" disabled>
+                        EXTRACT
+                    </button>
+                    <div class="file-type-badge text-xs mt-2 px-2 py-1 rounded-full">
+                        HTML, JS, React
+                    </div>
+                </div>
+                
+                <div class="download-category rounded-xl p-6 text-center">
+                    <div class="text-4xl mb-4">⚙️</div>
+                    <h3 class="text-lg font-bold text-neon-blue mb-2">CODE</h3>
+                    <p class="text-sm text-gray-400 mb-4">Scripts, functions & encodings</p>
+                    <button id="download-code" class="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-2 px-4 rounded-lg font-semibold transition-all duration-300 hover:scale-105 disabled:from-gray-600 disabled:to-gray-500" disabled>
+                        EXTRACT
+                    </button>
+                    <div class="file-type-badge text-xs mt-2 px-2 py-1 rounded-full">
+                        PY, JS, JSON
+                    </div>
+                </div>
+                
+                <div class="download-category rounded-xl p-6 text-center">
+                    <div class="text-4xl mb-4">🎥</div>
+                    <h3 class="text-lg font-bold text-neon-pink mb-2">MEDIA</h3>
+                    <p class="text-sm text-gray-400 mb-4">Videos, images & audio</p>
+                    <button id="download-media" class="w-full bg-gradient-to-r from-red-600 to-orange-600 text-white py-2 px-4 rounded-lg font-semibold transition-all duration-300 hover:scale-105 disabled:from-gray-600 disabled:to-gray-500" disabled>
+                        EXTRACT
+                    </button>
+                    <div class="file-type-badge text-xs mt-2 px-2 py-1 rounded-full">
+                        MP4, PNG, WEBM
+                    </div>
+                </div>
+                
+                <div class="download-category rounded-xl p-6 text-center">
+                    <div class="text-4xl mb-4">💬</div>
+                    <h3 class="text-lg font-bold text-neon-purple mb-2">CHATS</h3>
+                    <p class="text-sm text-gray-400 mb-4">Conversations & interactions</p>
+                    <button id="download-chats" class="w-full bg-gradient-to-r from-cyan-600 to-blue-600 text-white py-2 px-4 rounded-lg font-semibold transition-all duration-300 hover:scale-105 disabled:from-gray-600 disabled:to-gray-500" disabled>
+                        EXTRACT
+                    </button>
+                    <div class="file-type-badge text-xs mt-2 px-2 py-1 rounded-full">
+                        TXT, JSON, MD
+                    </div>
+                </div>
+                
+                <div class="download-category rounded-xl p-6 text-center">
+                    <div class="text-4xl mb-4">📋</div>
+                    <h3 class="text-lg font-bold text-neon-green mb-2">DOCUMENTS</h3>
+                    <p class="text-sm text-gray-400 mb-4">Text documents & notes</p>
+                    <button id="download-documents" class="w-full bg-gradient-to-r from-teal-600 to-green-600 text-white py-2 px-4 rounded-lg font-semibold transition-all duration-300 hover:scale-105 disabled:from-gray-600 disabled:to-gray-500" disabled>
+                        EXTRACT
+                    </button>
+                    <div class="file-type-badge text-xs mt-2 px-2 py-1 rounded-full">
+                        DOCX, PDF, TXT
+                    </div>
+                </div>
+                
+                <div class="download-category rounded-xl p-6 text-center">
+                    <div class="text-4xl mb-4">📈</div>
+                    <h3 class="text-lg font-bold text-neon-blue mb-2">ANALYTICS</h3>
+                    <p class="text-sm text-gray-400 mb-4">Reports & visualizations</p>
+                    <button id="download-analytics" class="w-full bg-gradient-to-r from-yellow-600 to-orange-600 text-white py-2 px-4 rounded-lg font-semibold transition-all duration-300 hover:scale-105 disabled:from-gray-600 disabled:to-gray-500" disabled>
+                        EXTRACT
+                    </button>
+                    <div class="file-type-badge text-xs mt-2 px-2 py-1 rounded-full">
+                        JSON, CSV, Charts
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Bulk Operations -->
+            <div class="hologram rounded-2xl p-6 mb-8">
+                <h3 class="text-2xl font-bold text-center mb-6">
+                    <span class="bg-gradient-to-r from-neon-blue to-neon-purple bg-clip-text text-transparent">
+                        🚀 QUANTUM BULK OPERATIONS
+                    </span>
+                </h3>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <button id="bulk-extract-all" class="bg-gradient-to-r from-neon-blue to-neon-purple text-white font-bold py-4 px-6 rounded-xl transition-all duration-300 transform hover:scale-105 neon-glow disabled:from-gray-600 disabled:to-gray-500" disabled>
+                        <span class="block text-lg">🎯 EXTRACT ALL</span>
+                        <span class="block text-sm opacity-75">Complete archive with categorization</span>
+                    </button>
+                    
+                    <button id="smart-extract" class="bg-gradient-to-r from-neon-purple to-neon-pink text-white font-bold py-4 px-6 rounded-xl transition-all duration-300 transform hover:scale-105 neon-glow disabled:from-gray-600 disabled:to-gray-500" disabled>
+                        <span class="block text-lg">🧠 SMART EXTRACT</span>
+                        <span class="block text-sm opacity-75">AI-powered content categorization</span>
+                    </button>
+                    
+                    <button id="custom-extract" class="bg-gradient-to-r from-neon-green to-neon-blue text-white font-bold py-4 px-6 rounded-xl transition-all duration-300 transform hover:scale-105 neon-glow disabled:from-gray-600 disabled:to-gray-500" disabled>
+                        <span class="block text-lg">⚡ CUSTOM EXTRACT</span>
+                        <span class="block text-sm opacity-75">Choose specific categories</span>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Progress & Status -->
+            <div id="extraction-progress" class="hidden hologram rounded-xl p-6 mb-6">
+                <h4 class="text-xl font-bold text-neon-blue mb-4 flex items-center">
+                    <span class="mr-3">⚡</span> QUANTUM EXTRACTION IN PROGRESS
+                </h4>
+                
+                <div class="space-y-4">
+                    <div>
+                        <div class="flex justify-between text-sm mb-2">
+                            <span id="progress-label">Initializing quantum processors...</span>
+                            <span id="progress-percent">0%</span>
+                        </div>
+                        <div class="bg-gray-700 rounded-full h-3">
+                            <div id="progress-bar" class="bg-gradient-to-r from-neon-blue to-neon-purple h-3 rounded-full transition-all duration-300" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    
+                    <div id="extraction-preview" class="extraction-preview rounded-lg p-4 text-sm">
+                        <div class="text-neon-green mb-2">🔍 EXTRACTION PREVIEW:</div>
+                        <div id="preview-content" class="text-gray-300 font-mono text-xs"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="extraction-status" class="text-center text-sm"></div>
+        </div>
+
+        <!-- Chat Interface -->
+        <div class="hologram rounded-2xl p-6 neon-glow">
+            <div id="chat-window" class="h-96 overflow-y-auto bg-black bg-opacity-30 p-4 rounded-xl border border-neon-blue border-opacity-30 mb-6 space-y-4">
+                <div class="w-full flex justify-start">
+                    <div class="p-4 rounded-xl max-w-[90%] chat-bubble-ai neon-glow">
+                        <div class="flex items-center mb-2">
+                            <span class="text-neon-purple mr-2">🤖</span>
+                            <span class="font-semibold text-neon-blue">QUANTUM AI ASSISTANT</span>
+                        </div>
+                        <p>Welcome to the advanced Operation Offload neural workspace! I'm your AI assistant, ready to help create content that will be quantum-processed and archived to your Google Drive with full categorization and linking preservation.</p>
+                        <div class="text-xs text-gray-400 mt-2">Neural pathways: ACTIVE | Quantum state: SYNCHRONIZED</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-end space-x-4">
+                <div class="flex-grow">
+                    <textarea id="prompt-input" class="w-full bg-gray-800 bg-opacity-50 border-2 border-neon-blue border-opacity-30 rounded-xl shadow-sm py-3 px-4 text-gray-200 focus:outline-none focus:ring-2 focus:ring-neon-blue focus:border-transparent resize-none backdrop-blur-sm" placeholder="Initialize neural communication protocol..." rows="1" disabled></textarea>
+                </div>
+                <button id="send-button" class="bg-gradient-to-r from-neon-blue to-neon-purple hover:from-blue-400 hover:to-purple-400 text-white font-bold py-3 px-8 rounded-xl disabled:from-gray-600 disabled:to-gray-500 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 neon-glow" disabled>
+                    <span class="mr-2">⚡</span>TRANSMIT
+                </button>
+            </div>
+        </div>
+
+        <!-- Extraction Location Selector Modal -->
+        <div id="location-selector-modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 backdrop-blur-sm">
+            <div class="settings-panel rounded-2xl p-8 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-2xl font-bold text-neon-blue flex items-center">
+                        <span class="mr-3">📂</span> QUANTUM EXTRACTION DESTINATIONS
+                    </h3>
+                    <button id="close-location-modal" class="text-gray-400 hover:text-white text-2xl">&times;</button>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div class="space-y-4">
+                        <h4 class="text-lg font-semibold text-neon-purple">📁 CURRENT EXTRACTION PATHS</h4>
+                        <div class="space-y-3" id="extraction-paths">
+                            <!-- Dynamic extraction paths will be populated here -->
+                        </div>
+                    </div>
+                    
+                    <div class="space-y-4">
+                        <h4 class="text-lg font-semibold text-neon-green">🎯 EXTRACTION PREVIEW</h4>
+                        <div class="bg-black bg-opacity-50 rounded-lg p-4 text-sm font-mono" id="extraction-structure-preview">
+                            <!-- Preview structure will be shown here -->
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="flex justify-between items-center">
+                    <div class="text-sm text-gray-400">
+                        <span class="text-neon-blue">💡 Tip:</span> All files maintain quantum-linked references to original interactions
+                    </div>
+                    <div class="space-x-4">
+                        <button id="reset-paths" class="bg-gradient-to-r from-yellow-600 to-orange-600 text-white py-2 px-4 rounded-lg font-semibold transition-all duration-300 hover:scale-105">
+                            🔄 RESET DEFAULTS
+                        </button>
+                        <button id="confirm-extraction" class="bg-gradient-to-r from-neon-green to-neon-blue text-black font-bold py-3 px-6 rounded-lg transition-all duration-300 hover:scale-105">
+                            🚀 INITIATE EXTRACTION
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load Google APIs -->
+    <script src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
+    <script src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
+
+    <script>
+        // --- ENHANCED CONFIGURATION ---
+        const CLIENT_ID = '700648198913-6itdi4jv7mhdhpq3ncqavndst36imo76.apps.googleusercontent.com';
+        const API_KEY = 'AIzaSyCZIUCIhmX9H8Qr7PZJbkVu5Ue7ZOs-H9U';
+        const GEMINI_API_KEY = 'AIzaSyCZIUCIhmX9H8Qr7PZJbkVu5Ue7ZOs-H9U';
+        const SCOPES = 'https://www.googleapis.com/auth/drive.file';
+        const GEMINI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent';
+        
+        let DRIVE_FOLDER_ID = null;
+        let conversationHistory = [];
+        let extractionSettings = {
+            defaultPaths: {
+                canvas: '/Canvas/',
+                research: '/Research/',
+                webapps: '/WebApps/',
+                code: '/Code/',
+                media: '/Media/',
+                chats: '/Conversations/',
+                documents: '/Documents/',
+                analytics: '/Analytics/'
+            },
+            filePrefix: 'OffloadAI_',
+            dateFormat: 'YYYY-MM-DD',
+            includeTime: true,
+            preserveLinks: true,
+            generateIndex: true,
+            createManifest: true
+        };
+
+        // --- ENHANCED UI ELEMENTS ---
+        const authorizeButton = document.getElementById('authorize_button');
+        const signoutButton = document.getElementById('signout_button');
+        const settingsButton = document.getElementById('settings-button');
+        const authStatus = document.getElementById('auth-status');
+        const driveStatus = document.getElementById('drive-status');
+        const chatWindow = document.getElementById('chat-window');
+        const promptInput = document.getElementById('prompt-input');
+        const sendButton = document.getElementById('send-button');
+        const settingsPanel = document.getElementById('settings-panel');
+        const downloadMatrix = document.getElementById('download-matrix');
+
+        let gapiInited = false;
+        let gisInited = false;
+        let tokenClient;
+        let isProcessing = false;
+        let currentExtractionType = null;
+
+        // --- CONTENT TYPE DEFINITIONS ---
+        const contentTypes = {
+            canvas: {
+                patterns: ['canvas', 'svg', 'html_render', 'visual', 'artifact'],
+                extensions: ['.html', '.svg', '.png', '.jpg'],
+                name: 'Canvas & Visual Content'
+            },
+            research: {
+                patterns: ['research', 'analysis', 'report', 'study', 'investigation'],
+                extensions: ['.pdf', '.docx', '.md', '.txt'],
+                name: 'Research & Analysis Reports'
+            },
+            webapps: {
+                patterns: ['webapp', 'application', 'interactive', 'react', 'vue'],
+                extensions: ['.html', '.js', '.jsx', '.css'],
+                name: 'Web Applications & Tools'
+            },
+            code: {
+                patterns: ['code', 'script', 'function', 'algorithm', 'encoding'],
+                extensions: ['.py', '.js', '.json', '.xml', '.sql'],
+                name: 'Code & Scripts'
+            },
+            media: {
+                patterns: ['video', 'image', 'audio', 'media', 'animation'],
+                extensions: ['.mp4', '.webm', '.png', '.gif', '.mp3'],
+                name: 'Media Files'
+            },
+            chats: {
+                patterns: ['conversation', 'chat', 'dialogue', 'interaction'],
+                extensions: ['.txt', '.json', '.md'],
+                name: 'Conversations & Interactions'
+            },
+            documents: {
+                patterns: ['document', 'text', 'note', 'memo', 'letter'],
+                extensions: ['.docx', '.pdf', '.txt', '.rtf'],
+                name: 'Documents & Notes'
+            },
+            analytics: {
+                patterns: ['analytics', 'metrics', 'statistics', 'visualization', 'chart'],
+                extensions: ['.json', '.csv', '.xlsx'],
+                name: 'Analytics & Reports'
+            }
+        };
+
+        // --- INITIALIZATION ---
+        function gapiLoaded() {
+            gapi.load('client', initializeGapiClient);
+        }
+
+        async function initializeGapiClient() {
+            try {
+                await gapi.client.init({
+                    apiKey: API_KEY,
+                    discoveryDocs: ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"],
+                });
+                gapiInited = true;
+                console.log("🚀 GAPI quantum processors initialized.");
+                maybeEnableButtons();
+            } catch (error) {
+                console.error("❌ Error initializing GAPI quantum processors:", error);
+                authStatus.innerHTML = "<span class='text-red-400'>❌ Quantum processor initialization failed</span>";
+            }
+        }
+
+        function gisLoaded() {
+            try {
+                tokenClient = google.accounts.oauth2.initTokenClient({
+                    client_id: CLIENT_ID,
+                    scope: SCOPES,
+                    callback: '',
+                });
+                gisInited = true;
+                console.log("🔐 Neural authentication matrix initialized.");
+                maybeEnableButtons();
+            } catch (error) {
+                console.error("❌ Error initializing neural authentication:", error);
+                authStatus.innerHTML = "<span class='text-red-400'>❌ Neural authentication matrix failed</span>";
+            }
+        }
+
+        function maybeEnableButtons() {
+            if (gapiInited && gisInited) {
+                authorizeButton.disabled = false;
+                authStatus.innerHTML = "✅ <span class='text-neon-green font-semibold'>Quantum systems online. Ready for neural synchronization.</span>";
+                console.log("⚡ All quantum systems operational.");
+            }
+        }
+
+        // --- ENHANCED AUTH LOGIC ---
+        authorizeButton.onclick = handleAuthClick;
+        signoutButton.onclick = handleSignoutClick;
+        settingsButton.onclick = toggleSettings;
+
+        function handleAuthClick() {
+            tokenClient.callback = async (resp) => {
+                if (resp.error !== undefined) {
+                    console.error("🔒 Neural authentication error:", resp);
+                    authStatus.innerHTML = `<span class='text-red-400'>❌ Authentication failed: ${resp.error_description || resp.error}</span>`;
+                    return;
+                }
+                await postAuthSetup();
+            };
+
+            if (gapi.client.getToken() === null) {
+                tokenClient.requestAccessToken({ prompt: 'consent' });
+            } else {
+                tokenClient.requestAccessToken({ prompt: '' });
+            }
+        }
+
+        async function postAuthSetup() {
+            authStatus.innerHTML = '<span class="text-neon-blue">🔄 Neural synchronization successful! Initializing quantum drive matrix...</span>';
+            signoutButton.classList.remove('hidden');
+            authorizeButton.classList.add('hidden');
+            
+            try {
+                DRIVE_FOLDER_ID = await findOrCreateFolder('Gemini_Synapse_Offload');
+                authStatus.innerHTML = `<span class="text-neon-green">✅ Quantum drive matrix synchronized. Neural pathways: ACTIVE</span>`;
+                driveStatus.innerHTML = `<span class="text-neon-blue">📁 Quantum Storage:</span> <span class="text-neon-green">Gemini_Synapse_Offload</span>`;
+                
+                // Enable all systems
+                promptInput.disabled = false;
+                sendButton.disabled = false;
+                promptInput.placeholder = "Initialize neural communication protocol...";
+                downloadMatrix.classList.remove('hidden');
+                enableAllExtractionFeatures();
+                
+            } catch (error) {
+                authStatus.innerHTML = `<span class="text-red-400">❌ Quantum drive matrix initialization failed: ${error.message}</span>`;
+                console.error(error);
+            }
+        }
+
+        function handleSignoutClick() {
+            const token = gapi.client.getToken();
+            if (token !== null) {
+                google.accounts.oauth2.revoke(token.access_token);
+                gapi.client.setToken('');
+                authStatus.innerHTML = '<span class="text-yellow-400">🔓 Neural disconnection complete. Systems in standby mode.</span>';
+                driveStatus.innerHTML = '';
+                signoutButton.classList.add('hidden');
+                authorizeButton.classList.remove('hidden');
+                DRIVE_FOLDER_ID = null;
+                
+                // Disable all systems
+                promptInput.disabled = true;
+                sendButton.disabled = true;
+                promptInput.placeholder = "Neural authentication required...";
+                downloadMatrix.classList.add('hidden');
+                disableAllExtractionFeatures();
+            }
+        }
+
+        function toggleSettings() {
+            settingsPanel.classList.toggle('hidden');
+            if (!settingsPanel.classList.contains('hidden')) {
+                loadSettingsToUI();
+            }
+        }
+
+        // --- SETTINGS MANAGEMENT ---
+        function loadSettingsToUI() {
+            document.getElementById('canvas-path').value = extractionSettings.defaultPaths.canvas;
+            document.getElementById('research-path').value = extractionSettings.defaultPaths.research;
+            document.getElementById('webapp-path').value = extractionSettings.defaultPaths.webapps;
+            document.getElementById('file-prefix').value = extractionSettings.filePrefix;
+            document.getElementById('date-format').value = extractionSettings.dateFormat;
+            document.getElementById('include-time').checked = extractionSettings.includeTime;
+            document.getElementById('preserve-links').checked = extractionSettings.preserveLinks;
+            document.getElementById('generate-index').checked = extractionSettings.generateIndex;
+            document.getElementById('create-manifest').checked = extractionSettings.createManifest;
+        }
+
+        function saveSettings() {
+            extractionSettings.defaultPaths.canvas = document.getElementById('canvas-path').value;
+            extractionSettings.defaultPaths.research = document.getElementById('research-path').value;
+            extractionSettings.defaultPaths.webapps = document.getElementById('webapp-path').value;
+            extractionSettings.filePrefix = document.getElementById('file-prefix').value;
+            extractionSettings.dateFormat = document.getElementById('date-format').value;
+            extractionSettings.includeTime = document.getElementById('include-time').checked;
+            extractionSettings.preserveLinks = document.getElementById('preserve-links').checked;
+            extractionSettings.generateIndex = document.getElementById('generate-index').checked;
+            extractionSettings.createManifest = document.getElementById('create-manifest').checked;
+            
+            // Save to sessionStorage for persistence
+            sessionStorage.setItem('offload_settings', JSON.stringify(extractionSettings));
+            
+            showQuantumNotification('⚙️ Settings saved to quantum memory', 'neon-green');
+        }
+
+        // --- EXTRACTION FEATURE MANAGEMENT ---
+        function enableAllExtractionFeatures() {
+            const buttons = [
+                'download-canvas', 'download-research', 'download-webapps', 'download-code',
+                'download-media', 'download-chats', 'download-documents', 'download-analytics',
+                'bulk-extract-all', 'smart-extract', 'custom-extract'
+            ];
+            buttons.forEach(id => {
+                const btn = document.getElementById(id);
+                if (btn) btn.disabled = false;
+            });
+        }
+
+        function disableAllExtractionFeatures() {
+            const buttons = [
+                'download-canvas', 'download-research', 'download-webapps', 'download-code',
+                'download-media', 'download-chats', 'download-documents', 'download-analytics',
+                'bulk-extract-all', 'smart-extract', 'custom-extract'
+            ];
+            buttons.forEach(id => {
+                const btn = document.getElementById(id);
+                if (btn) btn.disabled = true;
+            });
+        }
+
+        // --- INDIVIDUAL CATEGORY EXTRACTION FUNCTIONS ---
+        async function extractContentByType(contentType) {
+            if (!DRIVE_FOLDER_ID) {
+                showQuantumNotification('❌ Quantum drive matrix not initialized', 'neon-pink');
+                return;
+            }
+
+            showExtractionProgress(true);
+            updateExtractionProgress(0, `🔍 Scanning for ${contentTypes[contentType].name}...`);
+
+            try {
+                const files = await getAllDriveFiles();
+                const relevantFiles = await categorizeFiles(files, [contentType]);
+                
+                if (relevantFiles[contentType].length === 0) {
+                    showQuantumNotification(`📭 No ${contentTypes[contentType].name} found`, 'neon-blue');
+                    return;
+                }
+
+                updateExtractionProgress(30, `📦 Found ${relevantFiles[contentType].length} ${contentType} files. Processing...`);
+                
+                const extractedContent = await processFilesForExtraction(relevantFiles[contentType], contentType);
+                const manifest = generateExtractionManifest(extractedContent, contentType);
+                
+                updateExtractionProgress(90, '🚀 Quantum packaging complete. Initiating download...');
+                
+                const timestamp = generateTimestamp();
+                const filename = `${extractionSettings.filePrefix}${contentType}_extraction_${timestamp}.json`;
+                
+                const packagedData = {
+                    extractionType: contentType,
+                    timestamp: new Date().toISOString(),
+                    settings: extractionSettings,
+                    manifest: manifest,
+                    content: extractedContent,
+                    metadata: {
+                        totalFiles: extractedContent.length,
+                        extractedBy: 'Operation Offload Quantum Engine',
+                        version: '2.0',
+                        quantumSignature: generateQuantumSignature()
+                    }
+                };
+
+                downloadJSON(packagedData, filename);
+                updateExtractionProgress(100, `✅ ${contentType} extraction complete!`);
+                showQuantumNotification(`🎯 ${contentTypes[contentType].name} extracted successfully!`, 'neon-green');
+
+            } catch (error) {
+                console.error(`❌ Error extracting ${contentType}:`, error);
+                showQuantumNotification(`❌ ${contentType} extraction failed: ${error.message}`, 'neon-pink');
+            } finally {
+                setTimeout(() => showExtractionProgress(false), 3000);
+            }
+        }
+
+        // --- BULK EXTRACTION FUNCTIONS ---
+        async function bulkExtractAll() {
+            showLocationSelector('bulk-all');
+        }
+
+        async function smartExtract() {
+            showExtractionProgress(true);
+            updateExtractionProgress(0, '🧠 Initiating AI-powered content analysis...');
+
+            try {
+                const files = await getAllDriveFiles();
+                updateExtractionProgress(20, '🔍 Analyzing content with quantum neural networks...');
+                
+                const categorizedFiles = await smartCategorizeFiles(files);
+                updateExtractionProgress(60, '📊 Neural analysis complete. Organizing by intelligence patterns...');
+                
+                const smartPackage = await generateSmartExtractionPackage(categorizedFiles);
+                updateExtractionProgress(90, '🚀 Quantum smart packaging complete...');
+                
+                const timestamp = generateTimestamp();
+                const filename = `${extractionSettings.filePrefix}smart_extraction_${timestamp}.json`;
+                
+                downloadJSON(smartPackage, filename);
+                updateExtractionProgress(100, '🧠 Smart extraction complete!');
+                showQuantumNotification('🧠 AI-powered smart extraction successful!', 'neon-purple');
+
+            } catch (error) {
+                console.error('❌ Smart extraction error:', error);
+                showQuantumNotification(`❌ Smart extraction failed: ${error.message}`, 'neon-pink');
+            } finally {
+                setTimeout(() => showExtractionProgress(false), 3000);
+            }
+        }
+
+        async function customExtract() {
+            showLocationSelector('custom');
+        }
+
+        // --- FILE PROCESSING & CATEGORIZATION ---
+        async function categorizeFiles(files, targetTypes = null) {
+            const categorized = {};
+            Object.keys(contentTypes).forEach(type => {
+                categorized[type] = [];
+            });
+
+            for (const file of files) {
+                const fileName = file.name.toLowerCase();
+                const content = await tryGetFileContent(file.id);
+                
+                for (const [type, config] of Object.entries(contentTypes)) {
+                    if (targetTypes && !targetTypes.includes(type)) continue;
+                    
+                    const matchesPattern = config.patterns.some(pattern => 
+                        fileName.includes(pattern) || (content && content.toLowerCase().includes(pattern))
+                    );
+                    
+                    const matchesExtension = config.extensions.some(ext => 
+                        fileName.endsWith(ext)
+                    );
+
+                    if (matchesPattern || matchesExtension) {
+                        categorized[type].push({
+                            ...file,
+                            content: content,
+                            matchReason: matchesPattern ? 'pattern' : 'extension'
+                        });
+                        break; // Avoid double categorization
+                    }
+                }
+            }
+
+            return categorized;
+        }
+
+        async function smartCategorizeFiles(files) {
+            // Enhanced AI-powered categorization using Gemini
+            const categorized = await categorizeFiles(files);
+            
+            // Apply AI analysis for ambiguous files
+            for (const [type, fileList] of Object.entries(categorized)) {
+                for (let i = 0; i < fileList.length; i++) {
+                    const file = fileList[i];
+                    if (file.content && file.content.length > 100) {
+                        try {
+                            const aiAnalysis = await analyzeContentWithAI(file.content, type);
+                            file.aiAnalysis = aiAnalysis;
+                            file.confidence = aiAnalysis.confidence || 0.5;
+                        } catch (error) {
+                            console.warn(`AI analysis failed for ${file.name}:`, error);
+                            file.confidence = 0.3;
+                        }
+                    }
+                }
+            }
+
+            return categorized;
+        }
+
+        async function analyzeContentWithAI(content, expectedType) {
+            const analysisPrompt = `Analyze this content and determine its type and characteristics:
+
+Content: "${content.substring(0, 500)}..."
+
+Expected type: ${expectedType}
+
+Provide analysis in JSON format with:
+- actualType: detected content type
+- confidence: 0.0-1.0 confidence score
+- characteristics: list of key features
+- suggestedCategory: best category for this content`;
+
+            try {
+                const response = await callGeminiAPI(analysisPrompt);
+                return JSON.parse(response);
+            } catch (error) {
+                return { confidence: 0.3, actualType: expectedType, error: error.message };
+            }
+        }
+
+        // --- LOCATION SELECTOR FUNCTIONS ---
+        function showLocationSelector(extractionType) {
+            currentExtractionType = extractionType;
+            const modal = document.getElementById('location-selector-modal');
+            modal.classList.remove('hidden');
+            
+            populateExtractionPaths();
+            updateExtractionPreview();
+        }
+
+        function populateExtractionPaths() {
+            const pathsContainer = document.getElementById('extraction-paths');
+            pathsContainer.innerHTML = '';
+            
+            Object.entries(contentTypes).forEach(([type, config]) => {
+                const pathDiv = document.createElement('div');
+                pathDiv.className = 'flex items-center space-x-3 p-3 bg-gray-800 bg-opacity-50 rounded-lg';
+                pathDiv.innerHTML = `
+                    <div class="text-2xl">${getTypeIcon(type)}</div>
+                    <div class="flex-grow">
+                        <div class="font-semibold text-sm text-neon-blue">${config.name}</div>
+                        <input type="text" class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white mt-1" 
+                               value="${extractionSettings.defaultPaths[type] || `/${type}/`}" 
+                               data-type="${type}">
+                    </div>
+                `;
+                pathsContainer.appendChild(pathDiv);
+            });
+        }
+
+        function updateExtractionPreview() {
+            const preview = document.getElementById('extraction-structure-preview');
+            const timestamp = generateTimestamp();
+            
+            let structure = `📦 Quantum Extraction Package\n`;
+            structure += `├── 📄 manifest_${timestamp}.json\n`;
+            structure += `├── 🔗 index_${timestamp}.html\n`;
+            structure += `├── ⚙️ settings_${timestamp}.json\n`;
+            structure += `└── 📁 extracted_content/\n`;
+            
+            Object.entries(contentTypes).forEach(([type, config]) => {
+                const path = document.querySelector(`input[data-type="${type}"]`)?.value || `/${type}/`;
+                structure += `    ├── 📁 ${path.replace(/\//g, '')}/\n`;
+                structure += `    │   ├── 📄 ${type}_files.json\n`;
+                structure += `    │   └── 📁 assets/\n`;
+            });
+            
+            preview.textContent = structure;
+        }
+
+        function getTypeIcon(type) {
+            const icons = {
+                canvas: '🎨', research: '📊', webapps: '🌐', code: '⚙️',
+                media: '🎥', chats: '💬', documents: '📋', analytics: '📈'
+            };
+            return icons[type] || '📄';
+        }
+
+        // --- UTILITY FUNCTIONS ---
+        function generateTimestamp() {
+            const now = new Date();
+            const format = extractionSettings.dateFormat;
+            
+            let timestamp = '';
+            switch (format) {
+                case 'YYYY-MM-DD':
+                    timestamp = now.toISOString().split('T')[0];
+                    break;
+                case 'MM-DD-YYYY':
+                    timestamp = `${(now.getMonth()+1).toString().padStart(2,'0')}-${now.getDate().toString().padStart(2,'0')}-${now.getFullYear()}`;
+                    break;
+                case 'DD-MM-YYYY':
+                    timestamp = `${now.getDate().toString().padStart(2,'0')}-${(now.getMonth()+1).toString().padStart(2,'0')}-${now.getFullYear()}`;
+                    break;
+                case 'timestamp':
+                    timestamp = now.getTime().toString();
+                    break;
+                default:
+                    timestamp = now.toISOString().split('T')[0];
+            }
+            
+            if (extractionSettings.includeTime && format !== 'timestamp') {
+                const time = now.toTimeString().split(' ')[0].replace(/:/g, '-');
+                timestamp += `_${time}`;
+            }
+            
+            return timestamp;
+        }
+
+        function generateQuantumSignature() {
+            return `QS_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        }
+
+        function showQuantumNotification(message, colorClass) {
+            // Create floating notification
+            const notification = document.createElement('div');
+            notification.className = `fixed top-4 right-4 bg-gray-900 border-2 border-${colorClass} text-white px-6 py-3 rounded-xl shadow-2xl z-50 transform translate-x-full transition-transform duration-500`;
+            notification.innerHTML = `<div class="flex items-center"><span class="mr-2">⚡</span>${message}</div>`;
+            
+            document.body.appendChild(notification);
+            
+            // Animate in
+            setTimeout(() => {
+                notification.classList.remove('translate-x-full');
+            }, 100);
+            
+            // Animate out and remove
+            setTimeout(() => {
+                notification.classList.add('translate-x-full');
+                setTimeout(() => document.body.removeChild(notification), 500);
+            }, 4000);
+        }
+
+        function showExtractionProgress(show) {
+            const progressDiv = document.getElementById('extraction-progress');
+            if (show) {
+                progressDiv.classList.remove('hidden');
+            } else {
+                progressDiv.classList.add('hidden');
+            }
+        }
+
+        function updateExtractionProgress(percent, text) {
+            document.getElementById('progress-bar').style.width = `${percent}%`;
+            document.getElementById('progress-label').textContent = text;
+            document.getElementById('progress-percent').textContent = `${Math.round(percent)}%`;
+            
+            // Update preview with current action
+            const preview = document.getElementById('preview-content');
+            if (preview) {
+                preview.textContent = `> ${text}\n> Quantum processing at ${percent}% efficiency\n> Neural pathways: ACTIVE`;
+            }
+        }
+
+        // --- ENHANCED GOOGLE DRIVE FUNCTIONS ---
+        async function findOrCreateFolder(folderName) {
+            try {
+                const searchResponse = await gapi.client.drive.files.list({
+                    q: `name='${folderName}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+                    fields: 'files(id, name)'
+                });
+
+                if (searchResponse.result.files && searchResponse.result.files.length > 0) {
+                    console.log(`🔍 Quantum folder located: ${folderName}`);
+                    return searchResponse.result.files[0].id;
+                }
+
+                const createResponse = await gapi.client.drive.files.create({
+                    resource: {
+                        name: folderName,
+                        mimeType: 'application/vnd.google-apps.folder'
+                    },
+                    fields: 'id'
+                });
+
+                console.log(`📁 Quantum folder materialized: ${folderName}`);
+                return createResponse.result.id;
+            } catch (error) {
+                console.error('❌ Quantum folder creation failed:', error);
+                throw new Error(`Failed to setup quantum folder: ${error.message}`);
+            }
+        }
+
+        async function getAllDriveFiles() {
+            try {
+                const response = await gapi.client.drive.files.list({
+                    q: `parents in '${DRIVE_FOLDER_ID}' and trashed=false`,
+                    fields: 'files(id, name, createdTime, modifiedTime, size)',
+                    orderBy: 'createdTime desc'
+                });
+                return response.result.files || [];
+            } catch (error) {
+                throw new Error(`Failed to scan quantum storage: ${error.message}`);
+            }
+        }
+
+        async function tryGetFileContent(fileId) {
+            try {
+                const response = await gapi.client.drive.files.get({
+                    fileId: fileId,
+                    alt: 'media'
+                });
+                return response.body;
+            } catch (error) {
+                console.warn(`Could not read quantum file ${fileId}:`, error);
+                return null;
+            }
+        }
+
+        // --- ENHANCED CHAT FUNCTIONS ---
