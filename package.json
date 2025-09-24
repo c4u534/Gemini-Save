@@ -1,0 +1,17 @@
+{
+  "name": "synapse-agent-final",
+  "version": "1.0.0",
+  "description": "The Synapse Agent for Operation Synapse - Final",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@google-cloud/vertexai": "^1.0.0",
+    "express": "^4.19.2",
+    "googleapis": "^137.1.0",
+    "cors": "^2.8.5"
+  }
+}
+
+
