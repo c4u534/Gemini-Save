@@ -1,6 +1,6 @@
 
 
->// --- SynapseAgent.js v2.4 (Final Validated Version) ---
+// --- SynapseAgent.js v2.4 (Final Validated Version) ---
 
 const express = require('express');
 const { google } = require('googleapis');
@@ -15,8 +15,8 @@ async function startServer() {
     app.use(cors()); 
     app.use(express.json());
 
-    const project = 'gold-braid-312320'; 
-    const location = 'us-central1';
+    const project = process.env.GOOGLE_PROJECT_ID || 'gold-braid-312320';
+    const location = process.env.GOOGLE_LOCATION || 'us-central1';
 
     const auth = new google.auth.GoogleAuth({
       scopes: ['https://www.googleapis.com/auth/drive.file']
@@ -26,7 +26,11 @@ async function startServer() {
     const vertex_ai = new VertexAI({ project: project, location: location });
     console.log('Authentication clients created successfully.');
 
-    const CONTEXT_FILE_ID = '1w0rN4iKxqIIRRmhUP9tlgkkJUUR0sHzjlInTX01SuQo';
+    const CONTEXT_FILE_ID = process.env.CONTEXT_FILE_ID;
+    if (!CONTEXT_FILE_ID) {
+        console.error('Error: CONTEXT_FILE_ID environment variable is required.');
+        process.exit(1);
+    }
 
     app.post('/', async (req, res) => {
         try {
