@@ -87,7 +87,8 @@ describe('Synapse Agent Integration Tests', () => {
             express: mockExpress,
             drive: mockDrive,
             vertex_ai: mockVertexAI,
-            cors: mockCors
+            cors: mockCors,
+            contextFileId: mockContextFileId
         });
 
         const handler = app._getHandler('/');
@@ -123,6 +124,8 @@ describe('Synapse Agent Integration Tests', () => {
         assert.strictEqual(responseBody.response, mockResponseText, 'Response text should match mock');
 
         // 2. Assert Drive Update
+        // Note: drive.files.update is fire-and-forget, but our mock is synchronous enough to set the flag immediately.
+        // In a real async scenario, we might need to wait, but here the mock executes synchronously before returning the promise.
         assert.strictEqual(driveUpdateCalled, true, 'drive.files.update should be called');
         assert.strictEqual(driveUpdateParams.fileId, mockContextFileId, 'drive.files.update should be called with correct fileId');
 
@@ -137,7 +140,8 @@ describe('Synapse Agent Integration Tests', () => {
             express: mockExpress,
             drive: mockDrive,
             vertex_ai: mockVertexAI,
-            cors: mockCors
+            cors: mockCors,
+            contextFileId: mockContextFileId
         });
 
         const handler = app._getHandler('/');
