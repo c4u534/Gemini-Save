@@ -1,20 +1,16 @@
+// --- SynapseAgent.js v2.4 (Final Validated Version) ---
 
-
->// --- SynapseAgent.js v2.4 (Final Validated Version) ---
-
-const express = require('express');
-const { google } = require('googleapis');
-const { VertexAI } = require('@google-cloud/vertexai');
-const cors = require('cors');
+// Removed top-level requires to allow testing without node_modules
 
 async function startServer() {
   try {
-    console.log('Initializing Synapse Agent...');
-    const app = express();
-    
-    app.use(cors()); 
-    app.use(express.json());
+    const express = require('express');
+    const { google } = require('googleapis');
+    const { VertexAI } = require('@google-cloud/vertexai');
+    const cors = require('cors');
 
+    console.log('Initializing Synapse Agent...');
+    
     const project = 'gold-braid-312320'; 
     const location = 'us-central1';
 
@@ -26,7 +22,29 @@ async function startServer() {
     const vertex_ai = new VertexAI({ project: project, location: location });
     console.log('Authentication clients created successfully.');
 
-    const CONTEXT_FILE_ID = '1w0rN4iKxqIIRRmhUP9tlgkkJUUR0sHzjlInTX01SuQo';
+    const contextFileId = process.env.CONTEXT_FILE_ID;
+    if (!contextFileId) {
+        throw new Error('CONTEXT_FILE_ID environment variable is not set.');
+    }
+
+    const app = createApp({ express, cors, drive, vertex_ai, contextFileId });
+
+    const port = process.env.PORT || 8080;
+    app.listen(port, () => {
+      console.log('Synapse Agent is successfully listening on port ' + port);
+    });
+
+  } catch (error) {
+    console.error('FATAL STARTUP ERROR:', error.message);
+    process.exit(1);
+  }
+}
+
+function createApp({ express, cors, drive, vertex_ai, contextFileId }) {
+    const app = express();
+
+    app.use(cors());
+    app.use(express.json());
 
     app.post('/', async (req, res) => {
         try {
@@ -38,7 +56,7 @@ async function startServer() {
             console.log(`Received prompt: "${userPrompt}"`);
             
             const contextCoreResponse = await drive.files.get({
-                fileId: CONTEXT_FILE_ID,
+                fileId: contextFileId,
                 alt: 'media'
             });
             const persistentContext = contextCoreResponse.data; 
@@ -54,7 +72,7 @@ async function startServer() {
             const updatedContextCore = { history: newHistory };
 
             await drive.files.update({
-                fileId: CONTEXT_FILE_ID,
+                fileId: contextFileId,
                 media: {
                     mimeType: 'application/json',
                     body: JSON.stringify(updatedContextCore)
@@ -70,15 +88,11 @@ async function startServer() {
         }
     });
 
-    const port = process.env.PORT || 8080;
-    app.listen(port, () => {
-      console.log(`Synapse Agent is successfully listening on port ${port}`);
-    });
-
-  } catch (error) {
-    console.error('FATAL STARTUP ERROR:', error.message);
-    process.exit(1);
-  }
+    return app;
 }
 
-startServer()
+if (require.main === module) {
+    startServer();
+}
+
+module.exports = { createApp, startServer };
