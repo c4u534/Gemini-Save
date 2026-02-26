@@ -1,6 +1,6 @@
 
 
->// --- SynapseAgent.js v2.4 (Final Validated Version) ---
+// --- SynapseAgent.js v2.4 (Final Validated Version) ---
 
 const express = require('express');
 const { google } = require('googleapis');
@@ -12,7 +12,11 @@ async function startServer() {
     console.log('Initializing Synapse Agent...');
     const app = express();
     
-    app.use(cors()); 
+    const allowedOrigins = ['http://localhost:3000', 'http://localhost:8080'];
+    if (process.env.ALLOWED_ORIGINS) {
+        allowedOrigins.push(...process.env.ALLOWED_ORIGINS.split(','));
+    }
+    app.use(cors({ origin: allowedOrigins }));
     app.use(express.json());
 
     const project = 'gold-braid-312320'; 
