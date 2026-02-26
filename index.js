@@ -1,11 +1,52 @@
 
-
->// --- SynapseAgent.js v2.4 (Final Validated Version) ---
+// --- SynapseAgent.js v2.4 (Final Validated Version) ---
 
 const express = require('express');
 const { google } = require('googleapis');
 const { VertexAI } = require('@google-cloud/vertexai');
 const cors = require('cors');
+
+const chatHandler = ({ drive, vertex_ai, CONTEXT_FILE_ID }) => async (req, res) => {
+    try {
+        const userPrompt = req.body.prompt;
+        if (!userPrompt) {
+            return res.status(400).send({ error: 'Prompt is required in the request body.' });
+        }
+
+        console.log(`Received prompt: "${userPrompt}"`);
+
+        const contextCoreResponse = await drive.files.get({
+            fileId: CONTEXT_FILE_ID,
+            alt: 'media'
+        });
+        const persistentContext = contextCoreResponse.data;
+
+        const geminiModel = vertex_ai.getGenerativeModel({ model: 'gemini-1.5-pro-preview-0409' });
+
+        const chat = geminiModel.startChat({ history: persistentContext.history || [] });
+
+        const result = await chat.sendMessage(userPrompt);
+        const geminiResponse = result.response.candidates[0].content.parts[0].text;
+
+        const newHistory = await chat.getHistory();
+        const updatedContextCore = { history: newHistory };
+
+        await drive.files.update({
+            fileId: CONTEXT_FILE_ID,
+            media: {
+                mimeType: 'application/json',
+                body: JSON.stringify(updatedContextCore)
+            }
+        });
+
+        console.log('Success. Sending response to user.');
+        res.status(200).send({ response: geminiResponse });
+
+    } catch (error) {
+        console.error('Error during request execution:', error.message);
+        res.status(500).send({ error: 'An internal error occurred.' });
+    }
+};
 
 async function startServer() {
   try {
@@ -28,47 +69,7 @@ async function startServer() {
 
     const CONTEXT_FILE_ID = '1w0rN4iKxqIIRRmhUP9tlgkkJUUR0sHzjlInTX01SuQo';
 
-    app.post('/', async (req, res) => {
-        try {
-            const userPrompt = req.body.prompt;
-            if (!userPrompt) {
-                return res.status(400).send({ error: 'Prompt is required in the request body.' });
-            }
-
-            console.log(`Received prompt: "${userPrompt}"`);
-            
-            const contextCoreResponse = await drive.files.get({
-                fileId: CONTEXT_FILE_ID,
-                alt: 'media'
-            });
-            const persistentContext = contextCoreResponse.data; 
-
-            const geminiModel = vertex_ai.getGenerativeModel({ model: 'gemini-1.5-pro-preview-0409' });
-            
-            const chat = geminiModel.startChat({ history: persistentContext.history || [] });
-
-            const result = await chat.sendMessage(userPrompt);
-            const geminiResponse = result.response.candidates[0].content.parts[0].text;
-            
-            const newHistory = await chat.getHistory();
-            const updatedContextCore = { history: newHistory };
-
-            await drive.files.update({
-                fileId: CONTEXT_FILE_ID,
-                media: {
-                    mimeType: 'application/json',
-                    body: JSON.stringify(updatedContextCore)
-                }
-            });
-
-            console.log('Success. Sending response to user.');
-            res.status(200).send({ response: geminiResponse });
-
-        } catch (error) {
-            console.error('Error during request execution:', error.message);
-            res.status(500).send({ error: 'An internal error occurred.' });
-        }
-    });
+    app.post('/', chatHandler({ drive, vertex_ai, CONTEXT_FILE_ID }));
 
     const port = process.env.PORT || 8080;
     app.listen(port, () => {
@@ -81,4 +82,8 @@ async function startServer() {
   }
 }
 
-startServer()
+if (require.main === module) {
+  startServer();
+}
+
+module.exports = { startServer, chatHandler };
