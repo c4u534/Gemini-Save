@@ -4,6 +4,7 @@
   "description": "The Synapse Agent for Operation Synapse - Final",
   "main": "index.js",
   "scripts": {
+    "test": "node --test index.test.js",
     "start": "node index.js"
   },
   "dependencies": {
@@ -13,5 +14,3 @@
     "cors": "^2.8.5"
   }
 }
-
-
