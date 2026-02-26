@@ -1,6 +1,4 @@
-
-
->// --- SynapseAgent.js v2.4 (Final Validated Version) ---
+// --- SynapseAgent.js v2.4 (Final Validated Version) ---
 
 const express = require('express');
 const { google } = require('googleapis');
@@ -45,7 +43,12 @@ async function startServer() {
 
             const geminiModel = vertex_ai.getGenerativeModel({ model: 'gemini-1.5-pro-preview-0409' });
             
-            const chat = geminiModel.startChat({ history: persistentContext.history || [] });
+            // Optimization: Limit history to prevent unbounded growth
+            const MAX_HISTORY_LENGTH = 50;
+            const fullHistory = persistentContext.history || [];
+            const limitedHistory = fullHistory.slice(-MAX_HISTORY_LENGTH);
+
+            const chat = geminiModel.startChat({ history: limitedHistory });
 
             const result = await chat.sendMessage(userPrompt);
             const geminiResponse = result.response.candidates[0].content.parts[0].text;
