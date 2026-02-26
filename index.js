@@ -12,6 +12,13 @@ async function createApp({ drive, vertex_ai }, expressLib = express, corsLib = c
     
     app.use(corsLib());
     app.use(expressLib.json());
+const CONTEXT_FILE_ID = '1w0rN4iKxqIIRRmhUP9tlgkkJUUR0sHzjlInTX01SuQo';
+
+function createApp({ express, drive, vertex_ai, cors }) {
+    const app = express();
+    
+    app.use(cors()); 
+    app.use(express.json());
 
     app.post('/', async (req, res) => {
         try {
@@ -60,6 +67,11 @@ async function createApp({ drive, vertex_ai }, expressLib = express, corsLib = c
 
 async function startServer() {
   try {
+    const express = require('express');
+    const { google } = require('googleapis');
+    const { VertexAI } = require('@google-cloud/vertexai');
+    const cors = require('cors');
+
     console.log('Initializing Synapse Agent...');
 
     const project = 'gold-braid-312320';
@@ -73,7 +85,7 @@ async function startServer() {
     const vertex_ai = new VertexAI({ project: project, location: location });
     console.log('Authentication clients created successfully.');
 
-    const app = await createApp({ drive, vertex_ai });
+    const app = createApp({ express, drive, vertex_ai, cors });
 
     const port = process.env.PORT || 8080;
     app.listen(port, () => {
@@ -90,4 +102,4 @@ if (require.main === module) {
     startServer();
 }
 
-module.exports = { createApp, startServer };
+module.exports = { createApp };

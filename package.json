@@ -4,8 +4,8 @@
   "description": "The Synapse Agent for Operation Synapse - Final",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "test": "node --test index.test.js"
+    "test": "node --test index.test.js",
+    "start": "node index.js"
   },
   "dependencies": {
     "@google-cloud/vertexai": "^1.0.0",
@@ -14,5 +14,3 @@
     "cors": "^2.8.5"
   }
 }
-
-
