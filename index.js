@@ -1,32 +1,17 @@
-
-
->// --- SynapseAgent.js v2.4 (Final Validated Version) ---
+// --- SynapseAgent.js v2.4 (Final Validated Version) ---
 
 const express = require('express');
 const { google } = require('googleapis');
 const { VertexAI } = require('@google-cloud/vertexai');
 const cors = require('cors');
 
-async function startServer() {
-  try {
-    console.log('Initializing Synapse Agent...');
-    const app = express();
+const CONTEXT_FILE_ID = '1w0rN4iKxqIIRRmhUP9tlgkkJUUR0sHzjlInTX01SuQo';
+
+async function createApp({ drive, vertex_ai }, expressLib = express, corsLib = cors) {
+    const app = expressLib();
     
-    app.use(cors()); 
-    app.use(express.json());
-
-    const project = 'gold-braid-312320'; 
-    const location = 'us-central1';
-
-    const auth = new google.auth.GoogleAuth({
-      scopes: ['https://www.googleapis.com/auth/drive.file']
-    });
-    const drive = google.drive({ version: 'v3', auth });
-    
-    const vertex_ai = new VertexAI({ project: project, location: location });
-    console.log('Authentication clients created successfully.');
-
-    const CONTEXT_FILE_ID = '1w0rN4iKxqIIRRmhUP9tlgkkJUUR0sHzjlInTX01SuQo';
+    app.use(corsLib());
+    app.use(expressLib.json());
 
     app.post('/', async (req, res) => {
         try {
@@ -70,6 +55,26 @@ async function startServer() {
         }
     });
 
+    return app;
+}
+
+async function startServer() {
+  try {
+    console.log('Initializing Synapse Agent...');
+
+    const project = 'gold-braid-312320';
+    const location = 'us-central1';
+
+    const auth = new google.auth.GoogleAuth({
+      scopes: ['https://www.googleapis.com/auth/drive.file']
+    });
+    const drive = google.drive({ version: 'v3', auth });
+
+    const vertex_ai = new VertexAI({ project: project, location: location });
+    console.log('Authentication clients created successfully.');
+
+    const app = await createApp({ drive, vertex_ai });
+
     const port = process.env.PORT || 8080;
     app.listen(port, () => {
       console.log(`Synapse Agent is successfully listening on port ${port}`);
@@ -81,4 +86,8 @@ async function startServer() {
   }
 }
 
-startServer()
+if (require.main === module) {
+    startServer();
+}
+
+module.exports = { createApp, startServer };
