@@ -1,30 +1,15 @@
-
-
->// --- SynapseAgent.js v2.4 (Final Validated Version) ---
+// --- SynapseAgent.js v2.4 (Final Validated Version) ---
 
 const express = require('express');
 const { google } = require('googleapis');
 const { VertexAI } = require('@google-cloud/vertexai');
 const cors = require('cors');
 
-async function startServer() {
-  try {
-    console.log('Initializing Synapse Agent...');
+const createApp = ({ drive, vertex_ai }) => {
     const app = express();
     
     app.use(cors()); 
     app.use(express.json());
-
-    const project = 'gold-braid-312320'; 
-    const location = 'us-central1';
-
-    const auth = new google.auth.GoogleAuth({
-      scopes: ['https://www.googleapis.com/auth/drive.file']
-    });
-    const drive = google.drive({ version: 'v3', auth });
-    
-    const vertex_ai = new VertexAI({ project: project, location: location });
-    console.log('Authentication clients created successfully.');
 
     const CONTEXT_FILE_ID = '1w0rN4iKxqIIRRmhUP9tlgkkJUUR0sHzjlInTX01SuQo';
 
@@ -48,7 +33,7 @@ async function startServer() {
             const chat = geminiModel.startChat({ history: persistentContext.history || [] });
 
             const result = await chat.sendMessage(userPrompt);
-            const geminiResponse = result.response.candidates[0].content.parts[0].text;
+            const geminiResponse = result.response?.candidates?.[0]?.content?.parts?.[0]?.text;
             
             const newHistory = await chat.getHistory();
             const updatedContextCore = { history: newHistory };
@@ -70,6 +55,26 @@ async function startServer() {
         }
     });
 
+    return app;
+};
+
+async function startServer() {
+  try {
+    console.log('Initializing Synapse Agent...');
+
+    const project = 'gold-braid-312320';
+    const location = 'us-central1';
+
+    const auth = new google.auth.GoogleAuth({
+      scopes: ['https://www.googleapis.com/auth/drive.file']
+    });
+    const drive = google.drive({ version: 'v3', auth });
+
+    const vertex_ai = new VertexAI({ project: project, location: location });
+    console.log('Authentication clients created successfully.');
+
+    const app = createApp({ drive, vertex_ai });
+
     const port = process.env.PORT || 8080;
     app.listen(port, () => {
       console.log(`Synapse Agent is successfully listening on port ${port}`);
@@ -81,4 +86,8 @@ async function startServer() {
   }
 }
 
-startServer()
+if (require.main === module) {
+    startServer();
+}
+
+module.exports = { createApp };
