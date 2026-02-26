@@ -1,5 +1,3 @@
-
-
 // --- SynapseAgent.js v2.4 (Final Validated Version) ---
 
 const express = require('express');
@@ -7,32 +5,17 @@ const { google } = require('googleapis');
 const { VertexAI } = require('@google-cloud/vertexai');
 const cors = require('cors');
 
-async function startServer() {
-  try {
-    console.log('Initializing Synapse Agent...');
-    const app = express();
+const CONTEXT_FILE_ID = '1w0rN4iKxqIIRRmhUP9tlgkkJUUR0sHzjlInTX01SuQo';
+
+async function createApp({ drive, vertex_ai }, expressLib = express, corsLib = cors) {
+    const app = expressLib();
     
-    const allowedOrigins = ['http://localhost:3000', 'http://localhost:8080'];
-    if (process.env.ALLOWED_ORIGINS) {
-        allowedOrigins.push(...process.env.ALLOWED_ORIGINS.split(','));
-    }
-    app.use(cors({ origin: allowedOrigins }));
-    app.use(express.json());
+    app.use(corsLib());
+    app.use(expressLib.json());
+const CONTEXT_FILE_ID = '1w0rN4iKxqIIRRmhUP9tlgkkJUUR0sHzjlInTX01SuQo';
 
-    const project = 'gold-braid-312320'; 
-    const location = 'us-central1';
-
-    const auth = new google.auth.GoogleAuth({
-      scopes: ['https://www.googleapis.com/auth/drive.file']
-    });
-    const drive = google.drive({ version: 'v3', auth });
-    
-    const vertex_ai = new VertexAI({ project: project, location: location });
-    console.log('Authentication clients created successfully.');
-
-    const CONTEXT_FILE_ID = '1w0rN4iKxqIIRRmhUP9tlgkkJUUR0sHzjlInTX01SuQo';
-
-    app.post('/', async (req, res) => {
+function createPromptHandler({ drive, vertex_ai, contextFileId }) {
+    return async (req, res) => {
         try {
             const userPrompt = req.body.prompt;
             if (!userPrompt) {
@@ -42,7 +25,7 @@ async function startServer() {
             console.log(`Received prompt: "${userPrompt}"`);
             
             const contextCoreResponse = await drive.files.get({
-                fileId: CONTEXT_FILE_ID,
+                fileId: contextFileId,
                 alt: 'media'
             });
             const persistentContext = contextCoreResponse.data; 
@@ -57,13 +40,14 @@ async function startServer() {
             const newHistory = await chat.getHistory();
             const updatedContextCore = { history: newHistory };
 
-            await drive.files.update({
-                fileId: CONTEXT_FILE_ID,
+            // Fire-and-forget update
+            drive.files.update({
+                fileId: contextFileId,
                 media: {
                     mimeType: 'application/json',
                     body: JSON.stringify(updatedContextCore)
                 }
-            });
+            }).catch(err => console.error('Error updating context in background:', err.message));
 
             console.log('Success. Sending response to user.');
             res.status(200).send({ response: geminiResponse });
@@ -72,17 +56,51 @@ async function startServer() {
             console.error('Error during request execution:', error.message);
             res.status(500).send({ error: 'An internal error occurred.' });
         }
-    });
-
-    const port = process.env.PORT || 8080;
-    app.listen(port, () => {
-      console.log(`Synapse Agent is successfully listening on port ${port}`);
-    });
-
-  } catch (error) {
-    console.error('FATAL STARTUP ERROR:', error.message);
-    process.exit(1);
-  }
+    };
 }
 
-startServer()
+function createApp({ express, drive, vertex_ai, cors, contextFileId = CONTEXT_FILE_ID }) {
+    const app = express();
+
+    app.use(cors());
+    app.use(express.json());
+
+    app.post('/', createPromptHandler({ drive, vertex_ai, contextFileId }));
+
+    return app;
+}
+
+async function startServer() {
+  try {
+    const express = require('express');
+    const { google } = require('googleapis');
+    const { VertexAI } = require('@google-cloud/vertexai');
+    const cors = require('cors');
+
+    console.log('Initializing Synapse Agent...');
+
+    const project = 'gold-braid-312320';
+    const location = 'us-central1';
+
+    const auth = new google.auth.GoogleAuth({
+      scopes: ['https://www.googleapis.com/auth/drive.file']
+    });
+    const drive = google.drive({ version: 'v3', auth });
+
+    const vertex_ai = new VertexAI({ project: project, location: location });
+    console.log('Authentication clients created successfully.');
+
+    const app = createApp({ express, drive, vertex_ai, cors, contextFileId: CONTEXT_FILE_ID });
+
+    return app;
+}
+
+if (require.main === module) {
+    startServer();
+}
+
+if (require.main === module) {
+    startServer();
+}
+
+module.exports = { createApp, createPromptHandler };
