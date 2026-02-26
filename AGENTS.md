@@ -1,1 +1,3 @@
 Do not wait for reviews do a commit and then reevaluate with the commit active if it fails to correct or help towards doing so then revert and try another approach once you have resolved the issue without any added then merge
+
+Make sure all agents are self adaptive and individually negotiable
