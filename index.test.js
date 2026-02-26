@@ -1,122 +1,168 @@
-const { test, describe, beforeEach } = require('node:test');
+const { test, describe } = require('node:test');
 const assert = require('node:assert');
 const { createApp } = require('./index.js');
 
-describe('Synapse Agent Security Fix', () => {
-    let mockExpress;
-    let mockCors;
-    let mockDrive;
-    let mockVertexAI;
-    let mockApp;
-    let routeHandler;
+describe('Synapse Agent Integration Tests', () => {
+    // Mock data
+    const mockContextFileId = '1w0rN4iKxqIIRRmhUP9tlgkkJUUR0sHzjlInTX01SuQo';
+    const mockInitialHistory = [{ role: 'user', parts: [{ text: 'hello' }] }];
+    const mockNewHistory = [
+        ...mockInitialHistory,
+        { role: 'model', parts: [{ text: 'response' }] }
+    ];
+    const mockResponseText = 'This is a mock response from Gemini';
 
-    beforeEach(() => {
-        // Mock Express
-        mockApp = {
+    // Track calls
+    let driveUpdateCalled = false;
+    let driveUpdateParams = null;
+
+    // Mocks for dependencies
+    const mockDrive = {
+        files: {
+            get: async ({ fileId, alt }) => {
+                if (fileId === mockContextFileId && alt === 'media') {
+                    return { data: { history: mockInitialHistory } };
+                }
+                throw new Error('Unexpected drive.files.get call');
+            },
+            update: async (params) => {
+                driveUpdateCalled = true;
+                driveUpdateParams = params;
+                return { data: { id: mockContextFileId } };
+            }
+        }
+    };
+
+    const mockChat = {
+        sendMessage: async (prompt) => {
+            return {
+                response: {
+                    candidates: [{
+                        content: {
+                            parts: [{ text: mockResponseText }]
+                        }
+                    }]
+                }
+            };
+        },
+        getHistory: async () => {
+            return mockNewHistory;
+        }
+    };
+
+    const mockVertexAI = {
+        getGenerativeModel: ({ model }) => {
+            return {
+                startChat: ({ history }) => {
+                    return mockChat;
+                }
+            };
+        }
+    };
+
+    // Manual mock for express
+    const mockExpress = () => {
+        const handlers = {};
+        const app = {
             use: () => {},
             post: (path, handler) => {
-                if (path === '/') routeHandler = handler;
+                handlers[path] = handler;
             },
+            // Helper to get handler for testing
+            _getHandler: (path) => handlers[path],
             listen: () => {}
         };
-        mockExpress = () => mockApp;
-        mockExpress.json = () => 'json-middleware';
+        return app;
+    };
+    mockExpress.json = () => {};
 
-        // Mock Cors
-        mockCors = () => 'cors-middleware';
+    const mockCors = () => {};
 
-        // Mock Drive
-        mockDrive = {
-            files: {
-                get: async ({ fileId }) => {
-                    return { data: { history: [] } };
-                },
-                update: async ({ fileId, media }) => {
-                    return {};
-                }
+    test('POST / should process prompt and update context in Drive', async () => {
+        // Reset tracking variables
+        driveUpdateCalled = false;
+        driveUpdateParams = null;
+
+        const app = createApp({
+            express: mockExpress,
+            drive: mockDrive,
+            vertex_ai: mockVertexAI,
+            cors: mockCors,
+            contextFileId: mockContextFileId
+        });
+
+        const handler = app._getHandler('/');
+        assert.ok(handler, 'Handler for / should be registered');
+
+        // Mock request and response objects
+        const req = {
+            body: { prompt: 'Test Prompt' }
+        };
+
+        let responseSent = false;
+        let responseStatus = 200;
+        let responseBody = null;
+
+        const res = {
+            status: (code) => {
+                responseStatus = code;
+                return res;
+            },
+            send: (body) => {
+                responseSent = true;
+                responseBody = body;
+                return res;
             }
         };
 
-        // Mock Vertex AI
-        mockVertexAI = {
-            getGenerativeModel: () => ({
-                startChat: () => ({
-                    sendMessage: async () => ({
-                        response: {
-                            candidates: [{ content: { parts: [{ text: 'Gemini Response' }] } }]
-                        }
-                    }),
-                    getHistory: async () => []
-                })
-            })
-        };
+        // Call the handler
+        await handler(req, res);
+
+        // 1. Assert response
+        assert.strictEqual(responseSent, true, 'Response should be sent');
+        assert.strictEqual(responseStatus, 200, 'Response status should be 200');
+        assert.strictEqual(responseBody.response, mockResponseText, 'Response text should match mock');
+
+        // 2. Assert Drive Update
+        // Note: drive.files.update is fire-and-forget, but our mock is synchronous enough to set the flag immediately.
+        // In a real async scenario, we might need to wait, but here the mock executes synchronously before returning the promise.
+        assert.strictEqual(driveUpdateCalled, true, 'drive.files.update should be called');
+        assert.strictEqual(driveUpdateParams.fileId, mockContextFileId, 'drive.files.update should be called with correct fileId');
+
+        // Check the body of the update
+        const updatedBody = JSON.parse(driveUpdateParams.media.body);
+        assert.deepStrictEqual(updatedBody.history, mockNewHistory, 'Updated history should match mockNewHistory');
+        assert.strictEqual(driveUpdateParams.media.mimeType, 'application/json', 'MimeType should be application/json');
     });
 
-    test('should use CONTEXT_FILE_ID from environment/arguments', async (t) => {
-        const testFileId = 'TEST_SECURE_ID_123';
-
-        // Track calls
-        let capturedGetFileId;
-        let capturedUpdateFileId;
-
-        // Spy on drive methods
-        mockDrive.files.get = async ({ fileId, alt }) => {
-            capturedGetFileId = fileId;
-            return { data: { history: [] } };
-        };
-        mockDrive.files.update = async ({ fileId, media }) => {
-            capturedUpdateFileId = fileId;
-            return {};
-        };
-
-        createApp({
+    test('POST / should return 400 if prompt is missing', async () => {
+        const app = createApp({
             express: mockExpress,
-            cors: mockCors,
             drive: mockDrive,
             vertex_ai: mockVertexAI,
-            contextFileId: testFileId
-        });
-
-        assert.ok(routeHandler, 'Route handler for POST / should be registered');
-
-        // Simulate Request
-        const req = { body: { prompt: 'Hello' } };
-        const res = {
-            status: (code) => ({
-                send: (body) => {}
-            }),
-            send: (body) => {}
-        };
-
-        await routeHandler(req, res);
-
-        assert.strictEqual(capturedGetFileId, testFileId, 'Drive.files.get should be called with correct fileId');
-        assert.strictEqual(capturedUpdateFileId, testFileId, 'Drive.files.update should be called with correct fileId');
-    });
-
-    test('should fail if prompt is missing', async (t) => {
-        createApp({
-            express: mockExpress,
             cors: mockCors,
-            drive: mockDrive,
-            vertex_ai: mockVertexAI,
-            contextFileId: 'id'
+            contextFileId: mockContextFileId
         });
 
+        const handler = app._getHandler('/');
         const req = { body: {} };
-        let sentStatus, sentBody;
+        let responseStatus = 200;
+        let responseBody = null;
+
         const res = {
             status: (code) => {
-                sentStatus = code;
-                return {
-                    send: (body) => { sentBody = body; }
-                };
+                responseStatus = code;
+                return res;
             },
-            send: (body) => { sentBody = body; }
+            send: (body) => {
+                responseBody = body;
+                return res;
+            }
         };
 
-        await routeHandler(req, res);
-        assert.strictEqual(sentStatus, 400);
-        assert.match(sentBody.error, /Prompt is required/);
+        await handler(req, res);
+
+        assert.strictEqual(responseStatus, 400);
+        assert.strictEqual(responseBody.error, 'Prompt is required in the request body.');
     });
 });
