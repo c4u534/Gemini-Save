@@ -14,13 +14,8 @@ async function createApp({ drive, vertex_ai }, expressLib = express, corsLib = c
     app.use(expressLib.json());
 const CONTEXT_FILE_ID = '1w0rN4iKxqIIRRmhUP9tlgkkJUUR0sHzjlInTX01SuQo';
 
-function createApp({ express, drive, vertex_ai, cors }) {
-    const app = express();
-    
-    app.use(cors()); 
-    app.use(express.json());
-
-    app.post('/', async (req, res) => {
+function createPromptHandler({ drive, vertex_ai, contextFileId }) {
+    return async (req, res) => {
         try {
             const userPrompt = req.body.prompt;
             if (!userPrompt) {
@@ -30,7 +25,7 @@ function createApp({ express, drive, vertex_ai, cors }) {
             console.log(`Received prompt: "${userPrompt}"`);
             
             const contextCoreResponse = await drive.files.get({
-                fileId: CONTEXT_FILE_ID,
+                fileId: contextFileId,
                 alt: 'media'
             });
             const persistentContext = contextCoreResponse.data; 
@@ -45,13 +40,14 @@ function createApp({ express, drive, vertex_ai, cors }) {
             const newHistory = await chat.getHistory();
             const updatedContextCore = { history: newHistory };
 
-            await drive.files.update({
-                fileId: CONTEXT_FILE_ID,
+            // Fire-and-forget update
+            drive.files.update({
+                fileId: contextFileId,
                 media: {
                     mimeType: 'application/json',
                     body: JSON.stringify(updatedContextCore)
                 }
-            });
+            }).catch(err => console.error('Error updating context in background:', err.message));
 
             console.log('Success. Sending response to user.');
             res.status(200).send({ response: geminiResponse });
@@ -60,7 +56,16 @@ function createApp({ express, drive, vertex_ai, cors }) {
             console.error('Error during request execution:', error.message);
             res.status(500).send({ error: 'An internal error occurred.' });
         }
-    });
+    };
+}
+
+function createApp({ express, drive, vertex_ai, cors, contextFileId = CONTEXT_FILE_ID }) {
+    const app = express();
+
+    app.use(cors());
+    app.use(express.json());
+
+    app.post('/', createPromptHandler({ drive, vertex_ai, contextFileId }));
 
     return app;
 }
@@ -85,7 +90,7 @@ async function startServer() {
     const vertex_ai = new VertexAI({ project: project, location: location });
     console.log('Authentication clients created successfully.');
 
-    const app = createApp({ express, drive, vertex_ai, cors });
+    const app = createApp({ express, drive, vertex_ai, cors, contextFileId: CONTEXT_FILE_ID });
 
     const port = process.env.PORT || 8080;
     app.listen(port, () => {
@@ -102,4 +107,4 @@ if (require.main === module) {
     startServer();
 }
 
-module.exports = { createApp };
+module.exports = { createApp, createPromptHandler };
