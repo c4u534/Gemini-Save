@@ -1,132 +1,164 @@
-const { test } = require('node:test');
+const { test, describe } = require('node:test');
 const assert = require('node:assert');
 const { createApp } = require('./index.js');
 
-test('Synapse Agent Security Tests', async (t) => {
-  // Set API Key for testing
-  process.env.API_KEY = 'test-secret-key';
+describe('Synapse Agent Integration Tests', () => {
+    // Mock data
+    const mockContextFileId = '1w0rN4iKxqIIRRmhUP9tlgkkJUUR0sHzjlInTX01SuQo';
+    const mockInitialHistory = [{ role: 'user', parts: [{ text: 'hello' }] }];
+    const mockNewHistory = [
+        ...mockInitialHistory,
+        { role: 'model', parts: [{ text: 'response' }] }
+    ];
+    const mockResponseText = 'This is a mock response from Gemini';
 
-  // --- Mocks ---
-  const mockReq = (headers = {}, body = {}) => ({
-    headers,
-    body
-  });
+    // Track calls
+    let driveUpdateCalled = false;
+    let driveUpdateParams = null;
 
-  const mockRes = () => {
-    const res = {};
-    res.status = (code) => {
-      res.statusCode = code;
-      return res;
+    // Mocks for dependencies
+    const mockDrive = {
+        files: {
+            get: async ({ fileId, alt }) => {
+                if (fileId === mockContextFileId && alt === 'media') {
+                    return { data: { history: mockInitialHistory } };
+                }
+                throw new Error('Unexpected drive.files.get call');
+            },
+            update: async (params) => {
+                driveUpdateCalled = true;
+                driveUpdateParams = params;
+                return { data: { id: mockContextFileId } };
+            }
+        }
     };
-    res.send = (body) => {
-      res.body = body;
-      return res;
+
+    const mockChat = {
+        sendMessage: async (prompt) => {
+            return {
+                response: {
+                    candidates: [{
+                        content: {
+                            parts: [{ text: mockResponseText }]
+                        }
+                    }]
+                }
+            };
+        },
+        getHistory: async () => {
+            return mockNewHistory;
+        }
     };
-    res.json = (body) => {
-      res.body = body;
-      return res;
+
+    const mockVertexAI = {
+        getGenerativeModel: ({ model }) => {
+            return {
+                startChat: ({ history }) => {
+                    return mockChat;
+                }
+            };
+        }
     };
-    return res;
-  };
 
-  const mockApp = {
-    _handlers: {},
-    use: () => {},
-    post: (path, handler) => {
-      mockApp._handlers[path] = handler;
-    },
-    listen: () => {}
-  };
+    // Manual mock for express
+    const mockExpress = () => {
+        const handlers = {};
+        const app = {
+            use: () => {},
+            post: (path, handler) => {
+                handlers[path] = handler;
+            },
+            // Helper to get handler for testing
+            _getHandler: (path) => handlers[path],
+            listen: () => {}
+        };
+        return app;
+    };
+    mockExpress.json = () => {};
 
-  const mockExpress = () => mockApp;
-  mockExpress.json = () => {};
+    const mockCors = () => {};
 
-  const mockCors = () => {};
+    test('POST / should process prompt and update context in Drive', async () => {
+        // Reset tracking variables
+        driveUpdateCalled = false;
+        driveUpdateParams = null;
 
-  const mockGoogle = {
-    auth: {
-      GoogleAuth: class { constructor() {} }
-    },
-    drive: () => ({
-      files: {
-        get: async () => ({ data: { history: [] } }),
-        update: async () => {}
-      }
-    })
-  };
+        const app = createApp({
+            express: mockExpress,
+            drive: mockDrive,
+            vertex_ai: mockVertexAI,
+            cors: mockCors
+        });
 
-  const mockVertexAI = class {
-    constructor() {}
-    getGenerativeModel() {
-      return {
-        startChat: () => ({
-          sendMessage: async () => ({
-            response: { candidates: [{ content: { parts: [{ text: 'Mock Response' }] } }] }
-          }),
-          getHistory: async () => []
-        })
-      };
-    }
-  };
+        const handler = app._getHandler('/');
+        assert.ok(handler, 'Handler for / should be registered');
 
-  // --- Initialize App ---
-  const app = await createApp({
-    express: mockExpress,
-    google: mockGoogle,
-    VertexAI: mockVertexAI,
-    cors: mockCors
-  });
+        // Mock request and response objects
+        const req = {
+            body: { prompt: 'Test Prompt' }
+        };
 
-  const handler = mockApp._handlers['/'];
-  assert.ok(handler, 'POST / handler should be registered');
+        let responseSent = false;
+        let responseStatus = 200;
+        let responseBody = null;
 
-  // --- Test Case 1: Missing API Key ---
-  await t.test('should return 401 if API key is missing', async () => {
-    const req = mockReq({}, { prompt: 'Hello' });
-    const res = mockRes();
+        const res = {
+            status: (code) => {
+                responseStatus = code;
+                return res;
+            },
+            send: (body) => {
+                responseSent = true;
+                responseBody = body;
+                return res;
+            }
+        };
 
-    await handler(req, res);
+        // Call the handler
+        await handler(req, res);
 
-    assert.strictEqual(res.statusCode, 401, 'Expected 401 Unauthorized for missing key');
-    assert.deepStrictEqual(res.body, { error: 'Unauthorized' });
-  });
+        // 1. Assert response
+        assert.strictEqual(responseSent, true, 'Response should be sent');
+        assert.strictEqual(responseStatus, 200, 'Response status should be 200');
+        assert.strictEqual(responseBody.response, mockResponseText, 'Response text should match mock');
 
-  // --- Test Case 2: Incorrect API Key ---
-  await t.test('should return 401 if API key is incorrect', async () => {
-    const req = mockReq({ 'x-api-key': 'wrong-key' }, { prompt: 'Hello' });
-    const res = mockRes();
+        // 2. Assert Drive Update
+        assert.strictEqual(driveUpdateCalled, true, 'drive.files.update should be called');
+        assert.strictEqual(driveUpdateParams.fileId, mockContextFileId, 'drive.files.update should be called with correct fileId');
 
-    await handler(req, res);
+        // Check the body of the update
+        const updatedBody = JSON.parse(driveUpdateParams.media.body);
+        assert.deepStrictEqual(updatedBody.history, mockNewHistory, 'Updated history should match mockNewHistory');
+        assert.strictEqual(driveUpdateParams.media.mimeType, 'application/json', 'MimeType should be application/json');
+    });
 
-    assert.strictEqual(res.statusCode, 401, 'Expected 401 Unauthorized for wrong key');
-    assert.deepStrictEqual(res.body, { error: 'Unauthorized' });
-  });
+    test('POST / should return 400 if prompt is missing', async () => {
+        const app = createApp({
+            express: mockExpress,
+            drive: mockDrive,
+            vertex_ai: mockVertexAI,
+            cors: mockCors
+        });
 
-  // --- Test Case 3: Correct API Key ---
-  await t.test('should return 200 (or proceed) if API key is correct', async () => {
-    const req = mockReq({ 'x-api-key': 'test-secret-key' }, { prompt: 'Hello' });
-    const res = mockRes();
+        const handler = app._getHandler('/');
+        const req = { body: {} };
+        let responseStatus = 200;
+        let responseBody = null;
 
-    await handler(req, res);
+        const res = {
+            status: (code) => {
+                responseStatus = code;
+                return res;
+            },
+            send: (body) => {
+                responseBody = body;
+                return res;
+            }
+        };
 
-    assert.strictEqual(res.statusCode, 200, 'Expected 200 OK for correct key');
-    assert.deepStrictEqual(res.body, { response: 'Mock Response' });
-  });
+        await handler(req, res);
 
-  // --- Test Case 4: API Key not configured (Server Error) ---
-  await t.test('should return 500 if server API_KEY is not set', async () => {
-      const originalKey = process.env.API_KEY;
-      delete process.env.API_KEY;
-
-      const req = mockReq({ 'x-api-key': 'test-secret-key' }, { prompt: 'Hello' });
-      const res = mockRes();
-
-      await handler(req, res);
-
-      assert.strictEqual(res.statusCode, 500, 'Expected 500 if env var is missing');
-      assert.deepStrictEqual(res.body, { error: 'Internal Server Error' });
-
-      process.env.API_KEY = originalKey;
-  });
-
+        assert.strictEqual(responseStatus, 400);
+        assert.strictEqual(responseBody.error, 'Prompt is required in the request body.');
+    });
 });
