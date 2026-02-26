@@ -1,15 +1,12 @@
-
-
->// --- SynapseAgent.js v2.4 (Final Validated Version) ---
+// --- SynapseAgent.js v2.4 (Final Validated Version) ---
 
 const express = require('express');
 const { google } = require('googleapis');
 const { VertexAI } = require('@google-cloud/vertexai');
 const cors = require('cors');
+const path = require('path');
 
-async function startServer() {
-  try {
-    console.log('Initializing Synapse Agent...');
+function createApp() {
     const app = express();
     
     app.use(cors()); 
@@ -27,6 +24,19 @@ async function startServer() {
     console.log('Authentication clients created successfully.');
 
     const CONTEXT_FILE_ID = '1w0rN4iKxqIIRRmhUP9tlgkkJUUR0sHzjlInTX01SuQo';
+
+    // Serve index.html
+    app.get('/', (req, res) => {
+        res.sendFile(path.join(__dirname, 'index.html'));
+    });
+
+    // Serve config
+    app.get('/api/config', (req, res) => {
+        res.json({
+            apiKey: process.env.GOOGLE_API_KEY || '',
+            clientId: process.env.GOOGLE_CLIENT_ID || ''
+        });
+    });
 
     app.post('/', async (req, res) => {
         try {
@@ -70,6 +80,13 @@ async function startServer() {
         }
     });
 
+    return app;
+}
+
+async function startServer() {
+  try {
+    console.log('Initializing Synapse Agent...');
+    const app = createApp();
     const port = process.env.PORT || 8080;
     app.listen(port, () => {
       console.log(`Synapse Agent is successfully listening on port ${port}`);
@@ -81,4 +98,8 @@ async function startServer() {
   }
 }
 
-startServer()
+if (require.main === module) {
+    startServer();
+}
+
+module.exports = { createApp };
