@@ -1,6 +1,4 @@
-
-
->// --- SynapseAgent.js v2.4 (Final Validated Version) ---
+// --- SynapseAgent.js v2.4 (Final Validated Version) ---
 
 const express = require('express');
 const { google } = require('googleapis');
@@ -12,7 +10,29 @@ async function startServer() {
     console.log('Initializing Synapse Agent...');
     const app = express();
     
-    app.use(cors()); 
+    // --- CORS Configuration ---
+    const allowedOrigins = [
+      'http://localhost:3000',
+      'http://localhost:8080'
+    ];
+
+    if (process.env.ALLOWED_ORIGIN) {
+      allowedOrigins.push(process.env.ALLOWED_ORIGIN);
+    }
+
+    const corsOptions = {
+      origin: function (origin, callback) {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.indexOf(origin) !== -1) {
+          callback(null, true);
+        } else {
+          callback(new Error('Not allowed by CORS'));
+        }
+      }
+    };
+
+    app.use(cors(corsOptions));
     app.use(express.json());
 
     const project = 'gold-braid-312320'; 
