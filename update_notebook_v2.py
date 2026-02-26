@@ -59,7 +59,6 @@ new_cell_content = [
     "            is_valid = omat.adjudicate(logic_val)\n",
     "            \n",
     "            print(f\"Executing Sequence {i+1}/{len(shards)}... [PARITY: {is_valid}] (Logic: {logic_val:.4f})\")\n",
-    "            time.sleep(0.3)\n",
     "\n",
     "        print(\"\n[SUCCESS]: All conditions to Null satisfied. Creation Invariant.\")\n",
     "        plot_vortic_stability()\n",
