@@ -1,6 +1,6 @@
 
 
->// --- SynapseAgent.js v2.4 (Final Validated Version) ---
+// --- SynapseAgent.js v2.4 (Final Validated Version) ---
 
 const express = require('express');
 const { google } = require('googleapis');
@@ -35,7 +35,6 @@ async function startServer() {
                 return res.status(400).send({ error: 'Prompt is required in the request body.' });
             }
 
-            console.log(`Received prompt: "${userPrompt}"`);
             
             const contextCoreResponse = await drive.files.get({
                 fileId: CONTEXT_FILE_ID,
