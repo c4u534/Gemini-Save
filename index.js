@@ -92,15 +92,11 @@ async function startServer() {
 
     const app = createApp({ express, drive, vertex_ai, cors, contextFileId: CONTEXT_FILE_ID });
 
-    const port = process.env.PORT || 8080;
-    app.listen(port, () => {
-      console.log(`Synapse Agent is successfully listening on port ${port}`);
-    });
+    return app;
+}
 
-  } catch (error) {
-    console.error('FATAL STARTUP ERROR:', error.message);
-    process.exit(1);
-  }
+if (require.main === module) {
+    startServer();
 }
 
 if (require.main === module) {
