@@ -1,6 +1,6 @@
 
 
->// --- SynapseAgent.js v2.4 (Final Validated Version) ---
+// --- SynapseAgent.js v2.4 (Final Validated Version) ---
 
 const express = require('express');
 const { google } = require('googleapis');
@@ -17,6 +17,7 @@ async function startServer() {
 
     const project = 'gold-braid-312320'; 
     const location = 'us-central1';
+    const GEMINI_MODEL_NAME = 'gemini-1.5-pro-preview-0409';
 
     const auth = new google.auth.GoogleAuth({
       scopes: ['https://www.googleapis.com/auth/drive.file']
@@ -43,7 +44,7 @@ async function startServer() {
             });
             const persistentContext = contextCoreResponse.data; 
 
-            const geminiModel = vertex_ai.getGenerativeModel({ model: 'gemini-1.5-pro-preview-0409' });
+            const geminiModel = vertex_ai.getGenerativeModel({ model: GEMINI_MODEL_NAME });
             
             const chat = geminiModel.startChat({ history: persistentContext.history || [] });
 
