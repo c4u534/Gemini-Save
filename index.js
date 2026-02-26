@@ -1,5 +1,17 @@
 // --- SynapseAgent.js v2.4 (Final Validated Version) ---
 
+const express = require('express');
+const { google } = require('googleapis');
+const { VertexAI } = require('@google-cloud/vertexai');
+const cors = require('cors');
+
+const CONTEXT_FILE_ID = '1w0rN4iKxqIIRRmhUP9tlgkkJUUR0sHzjlInTX01SuQo';
+
+async function createApp({ drive, vertex_ai }, expressLib = express, corsLib = cors) {
+    const app = expressLib();
+    
+    app.use(corsLib());
+    app.use(expressLib.json());
 const CONTEXT_FILE_ID = '1w0rN4iKxqIIRRmhUP9tlgkkJUUR0sHzjlInTX01SuQo';
 
 function createPromptHandler({ drive, vertex_ai, contextFileId }) {
