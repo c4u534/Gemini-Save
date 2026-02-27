@@ -6,6 +6,7 @@
     <title>Operation Offload: Intelligent Workspace</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="/env-config.js"></script>
     <style>
         body { font-family: 'Inter', sans-serif; background-color: #111827; color: #f3f4f6; }
         .chat-bubble-user { background-color: #1f2937; }
@@ -47,9 +48,9 @@
 
     <script>
         // --- CONFIGURATION ---
-        // CRITICAL: Replace these placeholder values with your actual credentials as strings.
-        const CLIENT_ID = '700648198913-6itdi4jv7mhdhpq3ncqavndst36imo76.apps.googleusercontent.com';
-        const API_KEY = 'YOUR_API_KEY_HERE'; // Replace with your actual API Key from Google Cloud
+        // Fetch configuration from the backend-served env-config.js
+        const CLIENT_ID = window.env?.CLIENT_ID || '700648198913-6itdi4jv7mhdhpq3ncqavndst36imo76.apps.googleusercontent.com';
+        const API_KEY = window.env?.API_KEY || 'YOUR_API_KEY_HERE'; // Ideally this should be restricted by origin
 
         // --- DO NOT EDIT BELOW THIS LINE ---
         const SCOPES = 'https://www.googleapis.com/auth/drive.file';
@@ -171,16 +172,137 @@
              addMessage(`<p>${prompt}</p>`, true);
              promptInput.value = '';
              addMessage('<p>Thinking...</p>');
-             const aiResponse = `<p>Here is an artifact. I will now offload it.</p>
-http://googleusercontent.com/immersive_entry_chip/0
-`;
-             await processAndOffload(aiResponse);
+
+             try {
+                const response = await fetch('/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt: prompt })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    const aiResponse = `<p>${data.response}</p>`;
+                    addMessage(aiResponse);
+                    await processAndOffload(aiResponse);
+                } else {
+                    const errorData = await response.json();
+                    addMessage(`<p class="text-red-400">Error: ${errorData.error || 'Server error'}</p>`);
+                }
+             } catch (error) {
+                 console.error('Network error:', error);
+                 addMessage(`<p class="text-red-400">Network Error: ${error.message}</p>`);
+             }
         };
         
         async function processAndOffload(responseHtml) {
             if (!gapi.client.getToken()) {
-                chatWindow.lastChild.querySelector('div').innerHTML = '<p class="text-red-400">Authentication required. Please sign in.</p>';
+                console.log("User not signed in, skipping offload.");
                 return;
             }
-            const immersiveRegex = /
-http://googleusercontent.com/immersive_entry_chip/1
+
+            if (!DRIVE_FOLDER_ID) {
+                console.log("Drive folder ID not set, attempting to initialize...");
+                try {
+                     await postAuthSetup();
+                } catch (e) {
+                    console.error("Failed to initialize drive folder:", e);
+                    addMessage('<p class="text-red-400">Error: Could not access Drive folder for offloading.</p>');
+                    return;
+                }
+            }
+
+            // Regex to find the immersive entry chip URL
+            const immersiveRegex = /http:\/\/googleusercontent\.com\/immersive_entry_chip\/([0-9]+)/;
+            const match = responseHtml.match(immersiveRegex);
+
+            if (match) {
+                const chipId = match[1];
+                console.log(`Found immersive entry chip with ID: ${chipId}`);
+
+                // Construct a filename based on the ID or current timestamp
+                const filename = `Artifact_${chipId}_${new Date().toISOString()}.txt`;
+                const content = `Content for artifact ${chipId}\n\nOriginal Response:\n${responseHtml}`;
+
+                try {
+                    const fileId = await createDriveFile(filename, content, DRIVE_FOLDER_ID);
+                    addMessage(`<p class="text-green-400">Artifact offloaded successfully! File ID: ${fileId}</p>`);
+                } catch (error) {
+                    console.error("Error offloading artifact:", error);
+                    addMessage(`<p class="text-red-400">Failed to offload artifact: ${error.message}</p>`);
+                }
+            } else {
+                console.log("No immersive entry chip found in response.");
+            }
+        }
+
+        async function findOrCreateFolder(folderName) {
+            const query = `mimeType = 'application/vnd.google-apps.folder' and name = '${folderName}' and trashed = false`;
+            try {
+                const response = await gapi.client.drive.files.list({
+                    q: query,
+                    fields: 'files(id, name)',
+                    spaces: 'drive'
+                });
+
+                const files = response.result.files;
+                if (files && files.length > 0) {
+                    console.log(`Found existing folder: ${files[0].name} (${files[0].id})`);
+                    return files[0].id;
+                } else {
+                    console.log(`Creating new folder: ${folderName}`);
+                    const fileMetadata = {
+                        name: folderName,
+                        mimeType: 'application/vnd.google-apps.folder'
+                    };
+                    const file = await gapi.client.drive.files.create({
+                        resource: fileMetadata,
+                        fields: 'id'
+                    });
+                    console.log(`Created folder: ${file.result.id}`);
+                    return file.result.id;
+                }
+            } catch (err) {
+                console.error('Error finding or creating folder:', err);
+                throw err;
+            }
+        }
+
+        async function createDriveFile(name, content, folderId) {
+            const fileMetadata = {
+                name: name,
+                parents: [folderId]
+            };
+            const media = {
+                mimeType: 'text/plain',
+                body: content
+            };
+
+            try {
+                const file = await gapi.client.drive.files.create({
+                    resource: fileMetadata,
+                    media: media,
+                    fields: 'id'
+                });
+                console.log('File Id:', file.result.id);
+                return file.result.id;
+            } catch (err) {
+                console.error('Error creating file:', err);
+                throw err;
+            }
+        }
+
+        // Add event listener for the send button
+        sendButton.addEventListener('click', sendMessage);
+
+        // Allow sending with Enter key
+        promptInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+    </script>
+</body>
+</html>
