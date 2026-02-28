@@ -19,7 +19,7 @@ for cell in notebook['cells']:
             "task_queue.appendleft((current_shard, index, attempts + 1))",
             "deferred_queue.append((current_shard, index, attempts + 1))",
             "if deferred_queue:",
-            "print(\"\n[PRIORITY SHIFT]: Main tasks complete. Analyzing Deferred Queue for persistent issues...\")"
+            "print(\"\\n[PRIORITY SHIFT]: Main tasks complete. Analyzing Deferred Queue for persistent issues...\")"
         ]
 
         missing_elements = [elem for elem in required_elements if elem not in source_code]
