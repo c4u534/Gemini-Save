@@ -1,3 +1,5 @@
+
+
 // --- SynapseAgent.js v2.4 (Final Validated Version) ---
 
 const express = require('express');
@@ -5,35 +7,27 @@ const { google } = require('googleapis');
 const { VertexAI } = require('@google-cloud/vertexai');
 const cors = require('cors');
 
-const createApp = (deps = {}) => {
+async function startServer() {
+  try {
+    console.log('Initializing Synapse Agent...');
     const app = express();
+
     app.use(cors());
     app.use(express.json());
 
-    const project = process.env.GOOGLE_CLOUD_PROJECT || 'gold-braid-312320';
-    const location = process.env.GOOGLE_CLOUD_LOCATION || 'us-central1';
-    const GEMINI_MODEL_NAME = process.env.GEMINI_MODEL_NAME || 'gemini-1.5-pro-preview-0409';
-    const CONTEXT_FILE_ID = process.env.CONTEXT_FILE_ID || '1w0rN4iKxqIIRRmhUP9tlgkkJUUR0sHzjlInTX01SuQo';
+    const project = 'gold-braid-312320';
+    const location = 'us-central1';
+    const GEMINI_MODEL_NAME = 'gemini-1.5-pro-preview-0409';
 
-    // Dependency injection
-    let drive = deps.drive;
-    let vertex_ai = deps.vertex_ai;
+    const auth = new google.auth.GoogleAuth({
+      scopes: ['https://www.googleapis.com/auth/drive.file']
+    });
+    const drive = google.drive({ version: 'v3', auth });
 
-    if (!drive) {
-        const auth = new google.auth.GoogleAuth({
-            scopes: ['https://www.googleapis.com/auth/drive.file']
-        });
-        drive = google.drive({ version: 'v3', auth });
-    }
+    const vertex_ai = new VertexAI({ project: project, location: location });
+    console.log('Authentication clients created successfully.');
 
-    if (!vertex_ai) {
-        vertex_ai = new VertexAI({ project: project, location: location });
-    }
-
-    // Log only if not in test mode or if explicitly desired
-    if (!deps.drive && !deps.vertex_ai) {
-         console.log('Authentication clients created successfully.');
-    }
+    const CONTEXT_FILE_ID = '1w0rN4iKxqIIRRmhUP9tlgkkJUUR0sHzjlInTX01SuQo';
 
     app.post('/', async (req, res) => {
         try {
@@ -77,14 +71,6 @@ const createApp = (deps = {}) => {
         }
     });
 
-    return app;
-};
-
-async function startServer() {
-  try {
-    console.log('Initializing Synapse Agent...');
-    const app = createApp();
-
     const port = process.env.PORT || 8080;
     app.listen(port, () => {
       console.log(`Synapse Agent is successfully listening on port ${port}`);
@@ -96,8 +82,4 @@ async function startServer() {
   }
 }
 
-if (require.main === module) {
-    startServer();
-}
-
-module.exports = { createApp, startServer };
+startServer()
