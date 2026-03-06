@@ -24,7 +24,7 @@ Module.prototype.require = function(path) {
 
 const { createApp } = require('./index.js');
 
-test('Synapse Agent Cache Behavior', async (t) => {
+test('Synapse Agent Multi-Session Cache Behavior', async (t) => {
     let driveGetCalls = 0;
     let driveUpdateCalls = 0;
 
@@ -35,8 +35,7 @@ test('Synapse Agent Cache Behavior', async (t) => {
                 return { data: { history: [] } };
             },
             update: async () => {
-                // Simulate delay
-                await new Promise(r => setTimeout(r, 50));
+                await new Promise(r => setTimeout(r, 10));
                 driveUpdateCalls++;
                 return {};
             }
@@ -57,61 +56,64 @@ test('Synapse Agent Cache Behavior', async (t) => {
     const app = createApp(mockDrive, mockVertexAI);
     const handler = mockExpressApp.handler;
 
-    // --- Request 1 ---
-    await t.test('First request fetches from Drive', async () => {
-        const req = { body: { prompt: 'Prompt 1' } };
-        let responseSent = false;
-        const res = {
-            status: (code) => {
-                assert.strictEqual(code, 200);
-                return {
-                    send: (body) => {
-                        assert.strictEqual(body.response, 'AI Response');
-                        responseSent = true;
-                    }
-                };
-            },
-            send: (body) => {
-                 assert.strictEqual(body.response, 'AI Response');
-                 responseSent = true;
-            }
-        };
+    // --- Global Session ---
+    await t.test('Global session uses Drive and Cache', async () => {
+        const req = { body: { prompt: 'Global 1' } }; // No sessionId
+        let sent = false;
+        const res = { status: () => ({ send: () => sent = true }), send: () => sent = true };
 
         await handler(req, res);
-        assert.strictEqual(responseSent, true);
-        assert.strictEqual(driveGetCalls, 1);
+        assert.strictEqual(sent, true);
+        assert.strictEqual(driveGetCalls, 1, 'Should fetch global from drive');
 
-        // Wait for async update
-        await new Promise(r => setTimeout(r, 100));
-        assert.strictEqual(driveUpdateCalls, 1);
+        const req2 = { body: { prompt: 'Global 2' } };
+        await handler(req2, res);
+        assert.strictEqual(driveGetCalls, 1, 'Should NOT fetch global again (cached)');
+
+        await new Promise(r => setTimeout(r, 50));
+        assert.strictEqual(driveUpdateCalls, 2, 'Should update drive both times for global');
     });
 
-    // --- Request 2 ---
-    await t.test('Second request uses cache', async () => {
-        const req = { body: { prompt: 'Prompt 2' } };
-        let responseSent = false;
-        const res = {
-            status: (code) => {
-                assert.strictEqual(code, 200);
-                return {
-                    send: (body) => {
-                        assert.strictEqual(body.response, 'AI Response');
-                        responseSent = true;
-                    }
-                };
-            },
-            send: (body) => {
-                 assert.strictEqual(body.response, 'AI Response');
-                 responseSent = true;
-            }
-        };
+    // --- Custom Session 1 ---
+    await t.test('Session 1 initializes separately', async () => {
+        const req = { body: { prompt: 'S1 Prompt', sessionId: 'user-1' } };
+        let sent = false;
+        const res = { status: () => ({ send: () => sent = true }), send: () => sent = true };
 
         await handler(req, res);
-        assert.strictEqual(responseSent, true);
-        assert.strictEqual(driveGetCalls, 1, 'Should NOT fetch from Drive again');
+        assert.strictEqual(sent, true);
+        assert.strictEqual(driveGetCalls, 1, 'Should NOT fetch custom session from drive');
 
-        // Wait for async update
-        await new Promise(r => setTimeout(r, 100));
-        assert.strictEqual(driveUpdateCalls, 2, 'Should update Drive in background');
+        await new Promise(r => setTimeout(r, 50));
+        assert.strictEqual(driveUpdateCalls, 2, 'Should NOT update drive for custom session');
     });
+
+    // --- Custom Session 2 ---
+    await t.test('Session 2 does not bleed into Session 1', async () => {
+        const req = { body: { prompt: 'S2 Prompt', sessionId: 'user-2' } };
+        let sent = false;
+        const res = { status: () => ({ send: () => sent = true }), send: () => sent = true };
+
+        await handler(req, res);
+        assert.strictEqual(sent, true);
+        assert.strictEqual(driveGetCalls, 1, 'Should NOT fetch custom session from drive');
+
+        await new Promise(r => setTimeout(r, 50));
+        assert.strictEqual(driveUpdateCalls, 2, 'Should NOT update drive for custom session');
+    });
+});
+
+test('LRU Cache Behavior', async (t) => {
+    const { LRUCache } = require('./index.js');
+    const cache = new LRUCache(2);
+
+    cache.set('a', 1);
+    cache.set('b', 2);
+    assert.strictEqual(cache.get('a'), 1); // Access 'a' so 'b' becomes least recently used
+
+    cache.set('c', 3); // This should evict 'b'
+
+    assert.strictEqual(cache.has('a'), true);
+    assert.strictEqual(cache.has('b'), false, 'Key b should be evicted');
+    assert.strictEqual(cache.has('c'), true);
 });

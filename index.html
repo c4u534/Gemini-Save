@@ -165,16 +165,23 @@
             chatWindow.scrollTop = chatWindow.scrollHeight;
         };
 
+        const sessionId = crypto.randomUUID();
         const sendMessage = async () => {
              const prompt = promptInput.value.trim();
              if (!prompt) return;
              addMessage(`<p>${prompt}</p>`, true);
-             promptInput.value = '';
-             addMessage('<p>Thinking...</p>');
-             const aiResponse = `<p>Here is an artifact. I will now offload it.</p>
-http://googleusercontent.com/immersive_entry_chip/0
-`;
-             await processAndOffload(aiResponse);
+             promptInput.value = "";
+             addMessage("<p>Thinking...</p>");
+             try {
+                const response = await fetch("/", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt, sessionId }) });
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const data = await response.json();
+                chatWindow.lastChild.remove();
+                addMessage(`<p>${data.response}</p>`);
+                await processAndOffload(data.response);
+             } catch (e) {
+                chatWindow.lastChild.querySelector("div").innerHTML = `<p class="text-red-400">Error: ${e.message}</p>`;
+             }
         };
         
         async function processAndOffload(responseHtml) {
