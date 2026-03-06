@@ -1,64 +1,97 @@
-const { test, describe, it } = require('node:test');
+const { test, describe, it, mock } = require('node:test');
 const assert = require('node:assert');
 const { createApp } = require('./index.js');
 
 describe('Synapse Agent Tests', () => {
-  it('should handle malformed Vertex AI response (expecting success with empty response)', async () => {
-    // Mock dependencies passed to createApp
-    const mockDrive = {
-      files: {
-        get: async () => ({ data: { history: [] } }),
-        update: async () => {}
-      }
-    };
+  const getMockDeps = () => {
+      let getCalls = [];
+      const mockDrive = {
+        files: {
+          get: async (args) => {
+              getCalls.push(args);
+              return { data: { history: [] } };
+          },
+          update: async () => {}
+        }
+      };
 
-    // Simulate malformed response (missing candidates)
-    const mockChat = {
-      sendMessage: async () => {
-        return {
-           response: {} // Missing candidates, should NOT crash anymore
-        };
-      },
-      getHistory: async () => []
-    };
+      const mockChat = {
+        sendMessage: async () => ({ response: {} }),
+        getHistory: async () => []
+      };
 
-    const mockVertexAI = {
-      getGenerativeModel: () => ({
-        startChat: () => mockChat
-      })
-    };
+      const mockVertexAI = {
+        getGenerativeModel: () => ({ startChat: () => mockChat })
+      };
 
-    const app = createApp({ drive: mockDrive, vertex_ai: mockVertexAI });
+      return { mockDrive, mockVertexAI, getCalls };
+  };
+
+  it('should handle malformed Vertex AI response', async () => {
+    const { mockDrive, mockVertexAI } = getMockDeps();
+    const mockConfig = { DEFAULT_CONTEXT_FILE_ID: 'default-id' };
+    const app = createApp({ drive: mockDrive, vertex_ai: mockVertexAI, config: mockConfig });
 
     const handler = app.handlers['/'];
-    assert.ok(handler, 'Route handler for / should exist');
-
-    const req = {
-        body: { prompt: 'Hello' }
-    };
-
+    const req = { body: { prompt: 'Hello' } };
     const res = {
-        statusCode: 200,
-        data: null,
-        status: function(code) {
-            this.statusCode = code;
-            return this;
-        },
-        send: function(data) {
-            this.data = data;
-            return this;
-        }
+        statusCode: 200, data: null,
+        status: function(code) { this.statusCode = code; return this; },
+        send: function(data) { this.data = data; return this; }
     };
 
     await handler(req, res);
+    assert.strictEqual(res.statusCode, 200);
+    assert.strictEqual(res.data.response, undefined);
+  });
 
-    // Now expecting 200 OK
-    assert.strictEqual(res.statusCode, 200, 'Should return 200 OK even if response is empty');
-    // The response body should contain { response: undefined }, which JSON.stringify would make {}
-    // But my spy captures the object passed to send.
-    // { response: undefined }
+  it('should use default context file ID from config when not provided in request', async () => {
+      const { mockDrive, mockVertexAI, getCalls } = getMockDeps();
+      const mockConfig = { DEFAULT_CONTEXT_FILE_ID: 'env-provided-id' };
+      const app = createApp({ drive: mockDrive, vertex_ai: mockVertexAI, config: mockConfig });
 
-    assert.ok(res.data, 'Response data should exist');
-    assert.strictEqual(res.data.response, undefined, 'Response text should be undefined');
+      const handler = app.handlers['/'];
+      const req = { body: { prompt: 'Hello' } };
+      const res = { statusCode: 200, status: function(c) { this.statusCode = c; return this; }, send: function(d) { return this; } };
+
+      await handler(req, res);
+
+      assert.strictEqual(getCalls.length, 1);
+      assert.strictEqual(getCalls[0].fileId, 'env-provided-id');
+  });
+
+  it('should prioritize context file ID provided in request body over config', async () => {
+      const { mockDrive, mockVertexAI, getCalls } = getMockDeps();
+      const mockConfig = { DEFAULT_CONTEXT_FILE_ID: 'env-provided-id' };
+      const app = createApp({ drive: mockDrive, vertex_ai: mockVertexAI, config: mockConfig });
+
+      const handler = app.handlers['/'];
+      const req = { body: { prompt: 'Hello', contextFileId: 'user-provided-id' } };
+      const res = { statusCode: 200, status: function(c) { this.statusCode = c; return this; }, send: function(d) { return this; } };
+
+      await handler(req, res);
+
+      assert.strictEqual(getCalls.length, 1);
+      assert.strictEqual(getCalls[0].fileId, 'user-provided-id');
+  });
+
+  it('should return 500 if no context file ID is available', async () => {
+      const { mockDrive, mockVertexAI } = getMockDeps();
+      // No default config provided
+      const mockConfig = { DEFAULT_CONTEXT_FILE_ID: '' };
+      const app = createApp({ drive: mockDrive, vertex_ai: mockVertexAI, config: mockConfig });
+
+      const handler = app.handlers['/'];
+      const req = { body: { prompt: 'Hello' } };
+      const res = {
+          statusCode: 200, data: null,
+          status: function(c) { this.statusCode = c; return this; },
+          send: function(d) { this.data = d; return this; }
+      };
+
+      await handler(req, res);
+
+      assert.strictEqual(res.statusCode, 500);
+      assert.strictEqual(res.data.error, 'No context file ID configured or provided.');
   });
 });

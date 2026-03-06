@@ -1,17 +1,16 @@
 // --- SynapseAgent.js v2.4 (Final Validated Version) ---
 
+require('dotenv').config();
 const express = require('express');
 const { google } = require('googleapis');
 const { VertexAI } = require('@google-cloud/vertexai');
 const cors = require('cors');
 
-const createApp = ({ drive, vertex_ai }) => {
+const createApp = ({ drive, vertex_ai, config }) => {
     const app = express();
     
     app.use(cors()); 
     app.use(express.json());
-
-    const CONTEXT_FILE_ID = '1w0rN4iKxqIIRRmhUP9tlgkkJUUR0sHzjlInTX01SuQo';
 
     app.post('/', async (req, res) => {
         try {
@@ -20,10 +19,17 @@ const createApp = ({ drive, vertex_ai }) => {
                 return res.status(400).send({ error: 'Prompt is required in the request body.' });
             }
 
-            console.log(`Received prompt: "${userPrompt}"`);
+            // Determine which context file to use: request body or environment fallback
+            const contextFileId = req.body.contextFileId || config.DEFAULT_CONTEXT_FILE_ID;
+
+            if (!contextFileId) {
+                return res.status(500).send({ error: 'No context file ID configured or provided.' });
+            }
+
+            console.log(`Received prompt: "${userPrompt}" using context file: ${contextFileId}`);
             
             const contextCoreResponse = await drive.files.get({
-                fileId: CONTEXT_FILE_ID,
+                fileId: contextFileId,
                 alt: 'media'
             });
             const persistentContext = contextCoreResponse.data; 
@@ -39,7 +45,7 @@ const createApp = ({ drive, vertex_ai }) => {
             const updatedContextCore = { history: newHistory };
 
             await drive.files.update({
-                fileId: CONTEXT_FILE_ID,
+                fileId: contextFileId,
                 media: {
                     mimeType: 'application/json',
                     body: JSON.stringify(updatedContextCore)
@@ -62,18 +68,22 @@ async function startServer() {
   try {
     console.log('Initializing Synapse Agent...');
 
-    const project = 'gold-braid-312320';
-    const location = 'us-central1';
+    // Load config from environment variables
+    const config = {
+        GOOGLE_CLOUD_PROJECT: process.env.GOOGLE_CLOUD_PROJECT || 'gold-braid-312320', // Fallback for backwards compatibility
+        GOOGLE_CLOUD_LOCATION: process.env.GOOGLE_CLOUD_LOCATION || 'us-central1',
+        DEFAULT_CONTEXT_FILE_ID: process.env.DEFAULT_CONTEXT_FILE_ID || '1w0rN4iKxqIIRRmhUP9tlgkkJUUR0sHzjlInTX01SuQo'
+    };
 
     const auth = new google.auth.GoogleAuth({
       scopes: ['https://www.googleapis.com/auth/drive.file']
     });
     const drive = google.drive({ version: 'v3', auth });
 
-    const vertex_ai = new VertexAI({ project: project, location: location });
+    const vertex_ai = new VertexAI({ project: config.GOOGLE_CLOUD_PROJECT, location: config.GOOGLE_CLOUD_LOCATION });
     console.log('Authentication clients created successfully.');
 
-    const app = createApp({ drive, vertex_ai });
+    const app = createApp({ drive, vertex_ai, config });
 
     const port = process.env.PORT || 8080;
     app.listen(port, () => {
