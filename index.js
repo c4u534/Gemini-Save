@@ -1,7 +1,3 @@
-
-
->// --- SynapseAgent.js v2.4 (Final Validated Version) ---
-
 const express = require('express');
 const { google } = require('googleapis');
 const { VertexAI } = require('@google-cloud/vertexai');
@@ -15,8 +11,8 @@ async function startServer() {
     app.use(cors()); 
     app.use(express.json());
 
-    const project = 'gold-braid-312320'; 
-    const location = 'us-central1';
+    const project = process.env.PROJECT_ID || 'gold-braid-312320';
+    const location = process.env.LOCATION || 'us-central1';
 
     const auth = new google.auth.GoogleAuth({
       scopes: ['https://www.googleapis.com/auth/drive.file']
