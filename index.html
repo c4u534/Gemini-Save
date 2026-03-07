@@ -172,8 +172,7 @@
              promptInput.value = '';
              addMessage('<p>Thinking...</p>');
              const aiResponse = `<p>Here is an artifact. I will now offload it.</p>
-http://googleusercontent.com/immersive_entry_chip/0
-`;
+<div class="code-block bg-gray-900 p-2 rounded mt-2">const x = 10;</div>`;
              await processAndOffload(aiResponse);
         };
         
@@ -182,5 +181,7 @@ http://googleusercontent.com/immersive_entry_chip/0
                 chatWindow.lastChild.querySelector('div').innerHTML = '<p class="text-red-400">Authentication required. Please sign in.</p>';
                 return;
             }
-            const immersiveRegex = /
-http://googleusercontent.com/immersive_entry_chip/1
+        }
+    </script>
+</body>
+</html>
