@@ -57,7 +57,11 @@ function createApp({ expressLib = express, corsLib = cors, drive, vertex_ai }) {
 
         } catch (error) {
             console.error('Error during request execution:', error.message);
-            res.status(500).send({ error: 'An internal error occurred.' });
+            if (error.message.includes('credentials') || error.message.includes('authentication')) {
+                res.status(503).send({ error: 'Google Cloud authentication or missing credential errors.' });
+            } else {
+                res.status(500).send({ error: 'An internal error occurred.' });
+            }
         }
     });
 
