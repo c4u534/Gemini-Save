@@ -18,6 +18,10 @@ function createApp({ expressLib = express, corsLib = cors, drive, vertex_ai }) {
     app.use(corsLib());
     app.use(expressLib.json());
 
+    app.get('/', (req, res) => {
+        res.sendFile(__dirname + '/index.html');
+    });
+
     app.post('/', async (req, res) => {
         try {
             const userPrompt = req.body.prompt;
