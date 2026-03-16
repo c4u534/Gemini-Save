@@ -5,7 +5,7 @@ const { google } = require('googleapis');
 const { VertexAI } = require('@google-cloud/vertexai');
 const cors = require('cors');
 
-const CONTEXT_FILE_ID = process.env.CONTEXT_FILE_ID || '1w0rN4iKxqIIRRmhUP9tlgkkJUUR0sHzjlInTX01SuQo';
+const CONTEXT_FILE_ID = process.env.CONTEXT_FILE_ID;
 const GEMINI_MODEL_NAME = 'gemini-1.5-pro-preview-0409';
 
 function createApp({ expressLib = express, corsLib = cors, drive, vertex_ai }) {
@@ -68,8 +68,17 @@ async function startServer() {
   try {
     console.log('Initializing Synapse Agent...');
 
-    const project = process.env.GOOGLE_CLOUD_PROJECT || 'gold-braid-312320';
-    const location = process.env.GOOGLE_CLOUD_LOCATION || 'us-central1';
+    if (!CONTEXT_FILE_ID) {
+      throw new Error('Missing required environment variable: CONTEXT_FILE_ID');
+    }
+    const project = process.env.GOOGLE_CLOUD_PROJECT;
+    if (!project) {
+      throw new Error('Missing required environment variable: GOOGLE_CLOUD_PROJECT');
+    }
+    const location = process.env.GOOGLE_CLOUD_LOCATION;
+    if (!location) {
+      throw new Error('Missing required environment variable: GOOGLE_CLOUD_LOCATION');
+    }
 
     const auth = new google.auth.GoogleAuth({
       scopes: ['https://www.googleapis.com/auth/drive.file']
