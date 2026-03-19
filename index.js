@@ -57,7 +57,11 @@ function createApp({ expressLib = express, corsLib = cors, drive, vertex_ai }) {
 
         } catch (error) {
             console.error('Error during request execution:', error.message);
-            res.status(500).send({ error: 'An internal error occurred.' });
+            if (error.message && (error.message.includes('Could not load the default credentials') || error.message.includes('authentication') || error.message.includes('credential'))) {
+                res.status(503).send({ error: error.message });
+            } else {
+                res.status(500).send({ error: 'An internal error occurred.' });
+            }
         }
     });
 
