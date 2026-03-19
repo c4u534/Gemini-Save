@@ -18,6 +18,8 @@ function createApp({ expressLib = express, corsLib = cors, drive, vertex_ai }) {
     app.use(corsLib());
     app.use(expressLib.json());
 
+    const geminiModel = vertex_ai.getGenerativeModel({ model: GEMINI_MODEL_NAME });
+
     app.post('/', async (req, res) => {
         try {
             const userPrompt = req.body.prompt;
@@ -33,8 +35,6 @@ function createApp({ expressLib = express, corsLib = cors, drive, vertex_ai }) {
             });
             const persistentContext = contextCoreResponse.data; 
 
-            const geminiModel = vertex_ai.getGenerativeModel({ model: GEMINI_MODEL_NAME });
-            
             const chat = geminiModel.startChat({ history: persistentContext.history || [] });
 
             const result = await chat.sendMessage(userPrompt);
@@ -57,6 +57,9 @@ function createApp({ expressLib = express, corsLib = cors, drive, vertex_ai }) {
 
         } catch (error) {
             console.error('Error during request execution:', error.message);
+            if (error.message.includes('Could not load the default credentials') || error.message.includes('authentication')) {
+                return res.status(503).send({ error: 'Authentication or credential error.' });
+            }
             res.status(500).send({ error: 'An internal error occurred.' });
         }
     });
