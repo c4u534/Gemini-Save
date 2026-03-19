@@ -1,6 +1,7 @@
 // --- SynapseAgent.js v2.4 (Final Validated Version) ---
 
 const express = require('express');
+const path = require('path');
 const { google } = require('googleapis');
 const { VertexAI } = require('@google-cloud/vertexai');
 const cors = require('cors');
@@ -17,6 +18,10 @@ function createApp({ expressLib = express, corsLib = cors, drive, vertex_ai }) {
 
     app.use(corsLib());
     app.use(expressLib.json());
+
+    app.get('/', (req, res) => {
+        res.sendFile(path.join(__dirname, 'index.html'));
+    });
 
     app.post('/', async (req, res) => {
         try {
