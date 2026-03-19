@@ -179,8 +179,117 @@ http://googleusercontent.com/immersive_entry_chip/0
         
         async function processAndOffload(responseHtml) {
             if (!gapi.client.getToken()) {
-                chatWindow.lastChild.querySelector('div').innerHTML = '<p class="text-red-400">Authentication required. Please sign in.</p>';
+                const bubble = chatWindow.lastElementChild;
+                if (bubble) {
+                    const contentDiv = bubble.querySelector('div');
+                    if (contentDiv) {
+                        contentDiv.innerHTML = '<p class="text-red-400">Authentication required. Please sign in.</p>';
+                    }
+                }
                 return;
             }
-            const immersiveRegex = /
-http://googleusercontent.com/immersive_entry_chip/1
+
+            const immersiveRegex = /\nhttp:\/\/googleusercontent\.com\/immersive_entry_chip\/(\d+)/;
+            const match = responseHtml.match(immersiveRegex);
+
+            let displayHtml = responseHtml;
+            let artifactId = null;
+
+            if (match) {
+                // If a chip is found, remove it from the display HTML
+                displayHtml = responseHtml.replace(immersiveRegex, '');
+                artifactId = match[1];
+                console.log(`Artifact chip detected: ID ${artifactId}`);
+            }
+
+            // Update the chat bubble (replace "Thinking...")
+            const bubble = chatWindow.lastElementChild;
+            if (bubble) {
+                const contentDiv = bubble.querySelector('div');
+                if (contentDiv) {
+                    contentDiv.innerHTML = displayHtml;
+                }
+            } else {
+                addMessage(displayHtml);
+            }
+
+            // If an artifact was detected, offload it to Drive
+            if (artifactId !== null && DRIVE_FOLDER_ID) {
+                try {
+                    // Create a file in Drive
+                    const fileMetadata = {
+                        'name': `Synapse_Artifact_${artifactId}_${new Date().toISOString()}.html`,
+                        'parents': [DRIVE_FOLDER_ID]
+                    };
+
+                    const boundary = '-------314159265358979323846';
+                    const delimiter = "\r\n--" + boundary + "\r\n";
+                    const close_delim = "\r\n--" + boundary + "--";
+
+                    const metadata = JSON.stringify(fileMetadata);
+
+                    const multipartRequestBody =
+                        delimiter +
+                        'Content-Type: application/json\r\n\r\n' +
+                        metadata +
+                        delimiter +
+                        'Content-Type: text/html\r\n\r\n' +
+                        displayHtml +
+                        close_delim;
+
+                    const request = gapi.client.request({
+                        'path': '/upload/drive/v3/files',
+                        'method': 'POST',
+                        'params': {'uploadType': 'multipart'},
+                        'headers': {
+                            'Content-Type': 'multipart/related; boundary="' + boundary + '"'
+                        },
+                        'body': multipartRequestBody
+                    });
+
+                    const response = await request;
+                    console.log('Artifact offloaded:', response.result.id);
+
+                    addMessage(`<p class="text-xs text-green-400 mt-2">✓ Artifact offloaded to Drive (ID: ${response.result.id})</p>`);
+
+                } catch (error) {
+                    console.error('Error offloading artifact:', error);
+                    addMessage(`<p class="text-xs text-red-400 mt-2">⚠ Error offloading artifact: ${error.message}</p>`);
+                }
+            }
+        }
+
+        async function findOrCreateFolder(folderName) {
+            try {
+                const q = `mimeType='application/vnd.google-apps.folder' and name='${folderName}' and trashed=false`;
+                const response = await gapi.client.drive.files.list({
+                    q: q,
+                    fields: 'files(id, name)',
+                });
+                const files = response.result.files;
+                if (files && files.length > 0) {
+                    console.log(`Found existing folder: ${folderName} (${files[0].id})`);
+                    return files[0].id;
+                } else {
+                    console.log(`Creating new folder: ${folderName}`);
+                    const fileMetadata = {
+                        'name': folderName,
+                        'mimeType': 'application/vnd.google-apps.folder'
+                    };
+                    const file = await gapi.client.drive.files.create({
+                        resource: fileMetadata,
+                        fields: 'id'
+                    });
+                    console.log(`Created folder: ${folderName} (${file.result.id})`);
+                    return file.result.id;
+                }
+            } catch (error) {
+                console.error('Error in findOrCreateFolder:', error);
+                throw error;
+            }
+        }
+
+        sendButton.onclick = sendMessage;
+    </script>
+</body>
+</html>
