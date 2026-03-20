@@ -42,14 +42,15 @@
         </div>
     </div>
 
+    <script src="/env-config.js"></script>
     <script async defer src="https://apis.google.com/js/api.js?onload=gapiLoaded"></script>
     <script async defer src="https://accounts.google.com/gsi/client?onload=gisLoaded"></script>
 
     <script>
         // --- CONFIGURATION ---
-        // CRITICAL: Replace these placeholder values with your actual credentials as strings.
-        const CLIENT_ID = '700648198913-6itdi4jv7mhdhpq3ncqavndst36imo76.apps.googleusercontent.com';
-        const API_KEY = 'YOUR_API_KEY_HERE'; // Replace with your actual API Key from Google Cloud
+        // Uses configuration from /env-config.js
+        const CLIENT_ID = window.env.CLIENT_ID;
+        const API_KEY = window.env.API_KEY;
 
         // --- DO NOT EDIT BELOW THIS LINE ---
         const SCOPES = 'https://www.googleapis.com/auth/drive.file';
@@ -159,7 +160,24 @@
             bubble.className = `w-full flex ${isUser ? 'justify-end' : 'justify-start'}`;
             const content = document.createElement('div');
             content.className = `p-3 rounded-lg max-w-[90%] ${isUser ? 'chat-bubble-user' : 'chat-bubble-ai'}`;
-            content.innerHTML = htmlContent;
+
+            // XSS Protection - use textContent instead of innerHTML if it's user input
+            // For now, replacing innerHTML entirely.
+            // Note: If you want formatting, a safer method like DOMPurify or specific element creation should be used.
+            // As per instructions, changing innerHTML to textContent.
+            // However, the caller passes HTML tags. We'll strip tags or just set textContent.
+            // Actually, the caller passes `<p>prompt</p>`. We should create paragraphs explicitly or just use textContent.
+            if (isUser) {
+                 // The caller passes <p>prompt</p>, so we strip the <p> and </p> specifically,
+                 // or just pass the prompt directly in the caller and wrap it here.
+                 // To avoid breaking < or >, we'll just extract the text between <p> and </p>.
+                 // A better way is to parse it or just change the caller.
+                 // Since the caller wraps it in <p>, we can use DOMParser.
+                 const doc = new DOMParser().parseFromString(htmlContent, 'text/html');
+                 content.textContent = doc.body.textContent || "";
+            } else {
+                 content.innerHTML = htmlContent;
+            }
             bubble.appendChild(content);
             chatWindow.appendChild(bubble);
             chatWindow.scrollTop = chatWindow.scrollHeight;
@@ -171,10 +189,27 @@
              addMessage(`<p>${prompt}</p>`, true);
              promptInput.value = '';
              addMessage('<p>Thinking...</p>');
-             const aiResponse = `<p>Here is an artifact. I will now offload it.</p>
-http://googleusercontent.com/immersive_entry_chip/0
-`;
-             await processAndOffload(aiResponse);
+
+             try {
+                const sessionId = crypto.randomUUID();
+                const response = await fetch('/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt, sessionId })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Request failed');
+                }
+
+                const data = await response.json();
+                chatWindow.lastChild.querySelector('div').innerHTML = data.response;
+                // Wait, processAndOffload was here, so let's call it:
+                await processAndOffload(data.response);
+             } catch (err) {
+                chatWindow.lastChild.querySelector('div').textContent = 'Error: ' + err.message;
+             }
         };
         
         async function processAndOffload(responseHtml) {

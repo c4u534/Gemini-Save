@@ -1,0 +1,5 @@
+Initializing Synapse Agent...
+Authentication clients created successfully.
+(node:3178) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+Synapse Agent is successfully listening on port 3000
