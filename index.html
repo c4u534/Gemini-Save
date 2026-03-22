@@ -42,17 +42,15 @@
         </div>
     </div>
 
+    <script src="/env-config.js"></script>
     <script async defer src="https://apis.google.com/js/api.js?onload=gapiLoaded"></script>
     <script async defer src="https://accounts.google.com/gsi/client?onload=gisLoaded"></script>
 
     <script>
-        // --- CONFIGURATION ---
-        // CRITICAL: Replace these placeholder values with your actual credentials as strings.
-        const CLIENT_ID = '700648198913-6itdi4jv7mhdhpq3ncqavndst36imo76.apps.googleusercontent.com';
-        const API_KEY = 'YOUR_API_KEY_HERE'; // Replace with your actual API Key from Google Cloud
-
         // --- DO NOT EDIT BELOW THIS LINE ---
         const SCOPES = 'https://www.googleapis.com/auth/drive.file';
+        const CLIENT_ID = window.ENV_CONFIG?.CLIENT_ID;
+        const API_KEY = window.ENV_CONFIG?.API_KEY;
         let DRIVE_FOLDER_ID = null;
 
         const authorizeButton = document.getElementById('authorize_button');
@@ -154,12 +152,18 @@
         }
         
         // --- CORE APPLICATION LOGIC ---
-        const addMessage = (htmlContent, isUser = false) => {
+        const sessionId = crypto.randomUUID();
+
+        const addMessage = (textContent, isUser = false) => {
             const bubble = document.createElement('div');
             bubble.className = `w-full flex ${isUser ? 'justify-end' : 'justify-start'}`;
             const content = document.createElement('div');
             content.className = `p-3 rounded-lg max-w-[90%] ${isUser ? 'chat-bubble-user' : 'chat-bubble-ai'}`;
-            content.innerHTML = htmlContent;
+            if (isUser || textContent === 'Thinking...' || textContent.startsWith('Error:')) {
+                content.textContent = textContent;
+            } else {
+                content.innerHTML = textContent;
+            }
             bubble.appendChild(content);
             chatWindow.appendChild(bubble);
             chatWindow.scrollTop = chatWindow.scrollHeight;
@@ -168,18 +172,34 @@
         const sendMessage = async () => {
              const prompt = promptInput.value.trim();
              if (!prompt) return;
-             addMessage(`<p>${prompt}</p>`, true);
+             addMessage(prompt, true);
              promptInput.value = '';
-             addMessage('<p>Thinking...</p>');
-             const aiResponse = `<p>Here is an artifact. I will now offload it.</p>
-http://googleusercontent.com/immersive_entry_chip/0
-`;
-             await processAndOffload(aiResponse);
+             addMessage('Thinking...');
+
+             try {
+                const response = await fetch('/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt, sessionId })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                chatWindow.lastChild.remove(); // Remove thinking bubble
+                addMessage(data.response);
+                await processAndOffload(data.response);
+             } catch (error) {
+                 chatWindow.lastChild.remove(); // Remove thinking bubble
+                 addMessage(`Error: ${error.message}`);
+             }
         };
         
         async function processAndOffload(responseHtml) {
             if (!gapi.client.getToken()) {
-                chatWindow.lastChild.querySelector('div').innerHTML = '<p class="text-red-400">Authentication required. Please sign in.</p>';
+                chatWindow.lastChild.querySelector('div').textContent = 'Authentication required. Please sign in.';
                 return;
             }
             const immersiveRegex = /
