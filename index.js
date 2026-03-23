@@ -5,12 +5,11 @@ const { google } = require('googleapis');
 const { VertexAI } = require('@google-cloud/vertexai');
 const cors = require('cors');
 
-const CONTEXT_FILE_ID = process.env.CONTEXT_FILE_ID || '1w0rN4iKxqIIRRmhUP9tlgkkJUUR0sHzjlInTX01SuQo';
 const GEMINI_MODEL_NAME = 'gemini-1.5-pro-preview-0409';
 
-function createApp({ expressLib = express, corsLib = cors, drive, vertex_ai }) {
-    if (!drive || !vertex_ai) {
-        throw new Error('Missing required dependencies: drive or vertex_ai');
+function createApp({ expressLib = express, corsLib = cors, drive, vertex_ai, contextFileId }) {
+    if (!drive || !vertex_ai || !contextFileId) {
+        throw new Error('Missing required dependencies: drive, vertex_ai, or contextFileId');
     }
 
     const app = expressLib();
@@ -28,7 +27,7 @@ function createApp({ expressLib = express, corsLib = cors, drive, vertex_ai }) {
             console.log(`Received prompt: "${userPrompt}"`);
             
             const contextCoreResponse = await drive.files.get({
-                fileId: CONTEXT_FILE_ID,
+                fileId: contextFileId,
                 alt: 'media'
             });
             const persistentContext = contextCoreResponse.data; 
@@ -45,7 +44,7 @@ function createApp({ expressLib = express, corsLib = cors, drive, vertex_ai }) {
 
             // Fire and forget update to reduce latency
             drive.files.update({
-                fileId: CONTEXT_FILE_ID,
+                fileId: contextFileId,
                 media: {
                     mimeType: 'application/json',
                     body: JSON.stringify(updatedContextCore)
@@ -57,6 +56,9 @@ function createApp({ expressLib = express, corsLib = cors, drive, vertex_ai }) {
 
         } catch (error) {
             console.error('Error during request execution:', error.message);
+            if (error.message.includes('Could not load the default credentials') || error.message.includes('authentication') || error.message.includes('credential')) {
+                return res.status(503).send({ error: 'Google Cloud authentication or missing credential errors' });
+            }
             res.status(500).send({ error: 'An internal error occurred.' });
         }
     });
@@ -68,8 +70,16 @@ async function startServer() {
   try {
     console.log('Initializing Synapse Agent...');
 
-    const project = process.env.GOOGLE_CLOUD_PROJECT || 'gold-braid-312320';
-    const location = process.env.GOOGLE_CLOUD_LOCATION || 'us-central1';
+    const contextFileId = process.env.CONTEXT_FILE_ID;
+    if (!contextFileId) {
+      throw new Error('Missing required environment variable: CONTEXT_FILE_ID');
+    }
+
+    const project = process.env.GOOGLE_CLOUD_PROJECT;
+    const location = process.env.GOOGLE_CLOUD_LOCATION;
+    if (!project || !location) {
+      throw new Error('Missing required environment variable: GOOGLE_CLOUD_PROJECT or GOOGLE_CLOUD_LOCATION');
+    }
 
     const auth = new google.auth.GoogleAuth({
       scopes: ['https://www.googleapis.com/auth/drive.file']
@@ -79,7 +89,7 @@ async function startServer() {
     const vertex_ai = new VertexAI({ project: project, location: location });
     console.log('Authentication clients created successfully.');
 
-    const app = createApp({ expressLib: express, corsLib: cors, drive, vertex_ai });
+    const app = createApp({ expressLib: express, corsLib: cors, drive, vertex_ai, contextFileId });
 
     const port = process.env.PORT || 8080;
     app.listen(port, () => {
@@ -88,7 +98,7 @@ async function startServer() {
 
   } catch (error) {
     console.error('FATAL STARTUP ERROR:', error.message);
-    process.exit(1);
+    throw error;
   }
 }
 
