@@ -45,15 +45,16 @@
     <script async defer src="https://apis.google.com/js/api.js?onload=gapiLoaded"></script>
     <script async defer src="https://accounts.google.com/gsi/client?onload=gisLoaded"></script>
 
+    <script src="/env-config.js"></script>
     <script>
         // --- CONFIGURATION ---
-        // CRITICAL: Replace these placeholder values with your actual credentials as strings.
-        const CLIENT_ID = '700648198913-6itdi4jv7mhdhpq3ncqavndst36imo76.apps.googleusercontent.com';
-        const API_KEY = 'YOUR_API_KEY_HERE'; // Replace with your actual API Key from Google Cloud
+        const CLIENT_ID = window.ENV ? window.ENV.CLIENT_ID : null;
+        const API_KEY = window.ENV ? window.ENV.API_KEY : null;
 
         // --- DO NOT EDIT BELOW THIS LINE ---
         const SCOPES = 'https://www.googleapis.com/auth/drive.file';
         let DRIVE_FOLDER_ID = null;
+        const sessionId = crypto.randomUUID();
 
         const authorizeButton = document.getElementById('authorize_button');
         const signoutButton = document.getElementById('signout_button');
@@ -154,33 +155,112 @@
         }
         
         // --- CORE APPLICATION LOGIC ---
-        const addMessage = (htmlContent, isUser = false) => {
+        const addMessage = (contentStr, isUser = false, isHtml = false) => {
             const bubble = document.createElement('div');
             bubble.className = `w-full flex ${isUser ? 'justify-end' : 'justify-start'}`;
             const content = document.createElement('div');
             content.className = `p-3 rounded-lg max-w-[90%] ${isUser ? 'chat-bubble-user' : 'chat-bubble-ai'}`;
-            content.innerHTML = htmlContent;
+            if (isHtml) {
+                content.innerHTML = contentStr;
+            } else {
+                content.textContent = contentStr;
+            }
             bubble.appendChild(content);
             chatWindow.appendChild(bubble);
             chatWindow.scrollTop = chatWindow.scrollHeight;
         };
 
-        const sendMessage = async () => {
-             const prompt = promptInput.value.trim();
-             if (!prompt) return;
-             addMessage(`<p>${prompt}</p>`, true);
-             promptInput.value = '';
-             addMessage('<p>Thinking...</p>');
-             const aiResponse = `<p>Here is an artifact. I will now offload it.</p>
-http://googleusercontent.com/immersive_entry_chip/0
-`;
-             await processAndOffload(aiResponse);
-        };
-        
         async function processAndOffload(responseHtml) {
             if (!gapi.client.getToken()) {
-                chatWindow.lastChild.querySelector('div').innerHTML = '<p class="text-red-400">Authentication required. Please sign in.</p>';
+                chatWindow.lastChild.querySelector('div').textContent = 'Authentication required. Please sign in.';
+                chatWindow.lastChild.querySelector('div').classList.add('text-red-400');
                 return;
             }
-            const immersiveRegex = /
-http://googleusercontent.com/immersive_entry_chip/1
+
+            chatWindow.lastChild.querySelector('div').innerHTML = responseHtml;
+            // The immersive chip indicates an artifact should be offloaded
+            if (responseHtml.includes('http://googleusercontent.com/immersive_entry_chip/0') || responseHtml.includes('http://googleusercontent.com/immersive_entry_chip/1')) {
+                 const fileName = `Artifact_${Date.now()}.html`;
+                 try {
+                     await offloadArtifact(fileName, responseHtml, DRIVE_FOLDER_ID);
+                 } catch (err) {
+                     console.error("Failed to offload artifact:", err);
+                 }
+            }
+        }
+
+        async function findOrCreateFolder(folderName) {
+             let response = await gapi.client.drive.files.list({
+                 q: `mimeType='application/vnd.google-apps.folder' and name='${folderName}' and trashed=false`,
+                 fields: 'files(id, name)',
+                 spaces: 'drive'
+             });
+
+             if (response.result.files.length > 0) {
+                 return response.result.files[0].id;
+             } else {
+                 let fileMetadata = {
+                     'name': folderName,
+                     'mimeType': 'application/vnd.google-apps.folder'
+                 };
+                 let folder = await gapi.client.drive.files.create({
+                     resource: fileMetadata,
+                     fields: 'id'
+                 });
+                 return folder.result.id;
+             }
+        }
+
+        async function offloadArtifact(name, content, parentId) {
+             const fileMetadata = {
+                 'name': name,
+                 parents: [parentId]
+             };
+             const media = {
+                 mimeType: 'text/html',
+                 body: content
+             };
+             // Note: using multipart via googleapis is complex in browser, simplified for example
+             // In a real scenario, you'd construct a multipart request or use a library that simplifies it for browser JS
+             console.log(`Simulating artifact offload to Drive: ${name}`);
+        }
+
+        sendButton.onclick = async () => {
+             const prompt = promptInput.value.trim();
+             if (!prompt) return;
+
+             addMessage(prompt, true, false);
+             promptInput.value = '';
+
+             addMessage('Thinking...', false, false);
+
+             try {
+                 const response = await fetch('/', {
+                     method: 'POST',
+                     headers: { 'Content-Type': 'application/json' },
+                     body: JSON.stringify({ prompt: prompt, sessionId: sessionId })
+                 });
+
+                 if (!response.ok) {
+                     throw new Error(`Server error: ${response.status}`);
+                 }
+
+                 const data = await response.json();
+                 await processAndOffload(data.response);
+             } catch (err) {
+                 console.error("Fetch error:", err);
+                 chatWindow.lastChild.querySelector('div').textContent = `Error: ${err.message}`;
+                 chatWindow.lastChild.querySelector('div').classList.add('text-red-400');
+             }
+        };
+
+        promptInput.addEventListener('keypress', function (e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendButton.click();
+            }
+        });
+
+    </script>
+</body>
+</html>
