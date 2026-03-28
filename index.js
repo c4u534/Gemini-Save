@@ -4,6 +4,7 @@ const express = require('express');
 const { google } = require('googleapis');
 const { VertexAI } = require('@google-cloud/vertexai');
 const cors = require('cors');
+const path = require('path');
 
 const CONTEXT_FILE_ID = process.env.CONTEXT_FILE_ID || '1w0rN4iKxqIIRRmhUP9tlgkkJUUR0sHzjlInTX01SuQo';
 const GEMINI_MODEL_NAME = 'gemini-1.5-pro-preview-0409';
@@ -17,6 +18,21 @@ function createApp({ expressLib = express, corsLib = cors, drive, vertex_ai }) {
 
     app.use(corsLib());
     app.use(expressLib.json());
+
+    // Serve the main index.html file securely
+    app.get('/', (req, res) => {
+        res.sendFile(path.join(__dirname, 'index.html'));
+    });
+
+    // Serve the configuration file if requested (e.g., for env vars like CLIENT_ID)
+    app.get('/env-config.js', (req, res) => {
+        const config = {
+             CLIENT_ID: process.env.CLIENT_ID || '700648198913-6itdi4jv7mhdhpq3ncqavndst36imo76.apps.googleusercontent.com',
+             API_KEY: process.env.API_KEY || 'YOUR_API_KEY_HERE'
+        };
+        res.type('application/javascript');
+        res.send(`window.env = ${JSON.stringify(config)};`);
+    });
 
     app.post('/', async (req, res) => {
         try {
