@@ -5,18 +5,34 @@ const { google } = require('googleapis');
 const { VertexAI } = require('@google-cloud/vertexai');
 const cors = require('cors');
 
-const CONTEXT_FILE_ID = process.env.CONTEXT_FILE_ID || '1w0rN4iKxqIIRRmhUP9tlgkkJUUR0sHzjlInTX01SuQo';
 const GEMINI_MODEL_NAME = 'gemini-1.5-pro-preview-0409';
 
-function createApp({ expressLib = express, corsLib = cors, drive, vertex_ai }) {
-    if (!drive || !vertex_ai) {
-        throw new Error('Missing required dependencies: drive or vertex_ai');
+function createApp({ expressLib = express, corsLib = cors, drive, vertex_ai, contextFileId }) {
+    if (!drive || !vertex_ai || !contextFileId) {
+        throw new Error('Missing required dependencies: drive, vertex_ai, or contextFileId');
     }
 
     const app = expressLib();
+    let cachedContext = null;
+    const geminiModel = vertex_ai.getGenerativeModel({ model: GEMINI_MODEL_NAME });
 
     app.use(corsLib());
     app.use(expressLib.json());
+
+    const path = require('path');
+
+    app.get('/', (req, res) => {
+        res.sendFile(path.join(__dirname, 'index.html'));
+    });
+
+    app.get('/env-config.js', (req, res) => {
+        const config = {
+            CLIENT_ID: process.env.GOOGLE_CLIENT_ID || null,
+            API_KEY: process.env.GOOGLE_API_KEY || null,
+        };
+        res.type('application/javascript');
+        res.send(`window.ENV = ${JSON.stringify(config)};`);
+    });
 
     app.post('/', async (req, res) => {
         try {
@@ -27,25 +43,26 @@ function createApp({ expressLib = express, corsLib = cors, drive, vertex_ai }) {
 
             console.log(`Received prompt: "${userPrompt}"`);
             
-            const contextCoreResponse = await drive.files.get({
-                fileId: CONTEXT_FILE_ID,
-                alt: 'media'
-            });
-            const persistentContext = contextCoreResponse.data; 
+            if (!cachedContext) {
+                const contextCoreResponse = await drive.files.get({
+                    fileId: contextFileId,
+                    alt: 'media'
+                });
+                cachedContext = contextCoreResponse.data;
+            }
 
-            const geminiModel = vertex_ai.getGenerativeModel({ model: GEMINI_MODEL_NAME });
-            
-            const chat = geminiModel.startChat({ history: persistentContext.history || [] });
+            const chat = geminiModel.startChat({ history: cachedContext.history || [] });
 
             const result = await chat.sendMessage(userPrompt);
             const geminiResponse = result.response.candidates[0].content.parts[0].text;
             
             const newHistory = await chat.getHistory();
             const updatedContextCore = { history: newHistory };
+            cachedContext = updatedContextCore;
 
             // Fire and forget update to reduce latency
             drive.files.update({
-                fileId: CONTEXT_FILE_ID,
+                fileId: contextFileId,
                 media: {
                     mimeType: 'application/json',
                     body: JSON.stringify(updatedContextCore)
@@ -68,8 +85,17 @@ async function startServer() {
   try {
     console.log('Initializing Synapse Agent...');
 
-    const project = process.env.GOOGLE_CLOUD_PROJECT || 'gold-braid-312320';
-    const location = process.env.GOOGLE_CLOUD_LOCATION || 'us-central1';
+    if (!process.env.GOOGLE_CLOUD_PROJECT || !process.env.GOOGLE_CLOUD_LOCATION) {
+        throw new Error('Missing required environment variables: GOOGLE_CLOUD_PROJECT or GOOGLE_CLOUD_LOCATION');
+    }
+
+    const project = process.env.GOOGLE_CLOUD_PROJECT;
+    const location = process.env.GOOGLE_CLOUD_LOCATION;
+    const contextFileId = process.env.CONTEXT_FILE_ID;
+
+    if (!contextFileId) {
+        throw new Error('Missing required environment variable: CONTEXT_FILE_ID');
+    }
 
     const auth = new google.auth.GoogleAuth({
       scopes: ['https://www.googleapis.com/auth/drive.file']
@@ -79,7 +105,7 @@ async function startServer() {
     const vertex_ai = new VertexAI({ project: project, location: location });
     console.log('Authentication clients created successfully.');
 
-    const app = createApp({ expressLib: express, corsLib: cors, drive, vertex_ai });
+    const app = createApp({ expressLib: express, corsLib: cors, drive, vertex_ai, contextFileId });
 
     const port = process.env.PORT || 8080;
     app.listen(port, () => {
@@ -88,7 +114,7 @@ async function startServer() {
 
   } catch (error) {
     console.error('FATAL STARTUP ERROR:', error.message);
-    process.exit(1);
+    throw error;
   }
 }
 
