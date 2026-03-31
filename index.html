@@ -165,22 +165,119 @@
             chatWindow.scrollTop = chatWindow.scrollHeight;
         };
 
+        async function findOrCreateFolder(folderName) {
+            try {
+                const query = `mimeType='application/vnd.google-apps.folder' and name='${folderName}' and trashed=false`;
+                const response = await gapi.client.drive.files.list({
+                    q: query,
+                    spaces: 'drive',
+                    fields: 'files(id, name)'
+                });
+                const files = response.result.files;
+                if (files && files.length > 0) {
+                    return files[0].id;
+                } else {
+                    const fileMetadata = {
+                        name: folderName,
+                        mimeType: 'application/vnd.google-apps.folder'
+                    };
+                    const folder = await gapi.client.drive.files.create({
+                        resource: fileMetadata,
+                        fields: 'id'
+                    });
+                    return folder.result.id;
+                }
+            } catch (err) {
+                console.error("Error finding or creating folder:", err);
+                throw err;
+            }
+        }
+
         const sendMessage = async () => {
              const prompt = promptInput.value.trim();
              if (!prompt) return;
              addMessage(`<p>${prompt}</p>`, true);
              promptInput.value = '';
              addMessage('<p>Thinking...</p>');
-             const aiResponse = `<p>Here is an artifact. I will now offload it.</p>
-http://googleusercontent.com/immersive_entry_chip/0
-`;
-             await processAndOffload(aiResponse);
+
+             try {
+                 const response = await fetch('http://localhost:8080/', {
+                     method: 'POST',
+                     headers: { 'Content-Type': 'application/json' },
+                     body: JSON.stringify({ prompt })
+                 });
+                 if (response.ok) {
+                     const data = await response.json();
+                     chatWindow.lastChild.querySelector('div').innerHTML = `<p>${data.response}</p>`;
+                     await processAndOffload(data.response);
+                 } else {
+                     chatWindow.lastChild.querySelector('div').innerHTML = '<p class="text-red-400">Error connecting to server.</p>';
+                 }
+             } catch (err) {
+                 chatWindow.lastChild.querySelector('div').innerHTML = '<p class="text-red-400">Network error connecting to server.</p>';
+             }
         };
         
         async function processAndOffload(responseHtml) {
             if (!gapi.client.getToken()) {
-                chatWindow.lastChild.querySelector('div').innerHTML = '<p class="text-red-400">Authentication required. Please sign in.</p>';
+                addMessage('<p class="text-yellow-400">Not offloading: Authentication required. Please sign in.</p>');
                 return;
             }
-            const immersiveRegex = /
-http://googleusercontent.com/immersive_entry_chip/1
+            if (!DRIVE_FOLDER_ID) {
+                addMessage('<p class="text-yellow-400">Not offloading: Drive folder not set up.</p>');
+                return;
+            }
+
+            try {
+                const fileMetadata = {
+                    name: `Synapse_Artifact_${new Date().getTime()}.html`,
+                    parents: [DRIVE_FOLDER_ID],
+                    mimeType: 'text/html'
+                };
+                const media = {
+                    mimeType: 'text/html',
+                    body: responseHtml
+                };
+
+                // Construct a multipart body for gapi
+                const boundary = '-------314159265358979323846';
+                const delimiter = "\r\n--" + boundary + "\r\n";
+                const close_delim = "\r\n--" + boundary + "--";
+
+                const multipartRequestBody =
+                    delimiter +
+                    'Content-Type: application/json\r\n\r\n' +
+                    JSON.stringify(fileMetadata) +
+                    delimiter +
+                    'Content-Type: ' + media.mimeType + '\r\n\r\n' +
+                    media.body +
+                    close_delim;
+
+                const request = gapi.client.request({
+                    'path': '/upload/drive/v3/files',
+                    'method': 'POST',
+                    'params': {'uploadType': 'multipart'},
+                    'headers': {
+                        'Content-Type': 'multipart/related; boundary="' + boundary + '"'
+                    },
+                    'body': multipartRequestBody
+                });
+
+                await request;
+                addMessage('<p class="text-green-400 text-sm">Artifact successfully offloaded to Drive.</p>');
+            } catch (err) {
+                console.error("Error offloading artifact:", err);
+                addMessage('<p class="text-red-400 text-sm">Failed to offload artifact.</p>');
+            }
+        }
+
+        sendButton.addEventListener('click', sendMessage);
+        promptInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>
