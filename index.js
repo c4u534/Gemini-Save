@@ -57,6 +57,9 @@ function createApp({ expressLib = express, corsLib = cors, drive, vertex_ai }) {
 
         } catch (error) {
             console.error('Error during request execution:', error.message);
+            if (error.message.includes('Could not load the default credentials') || error.message.includes('authentication')) {
+                return res.status(503).send({ error: 'Authentication missing or misconfigured. Please check Google Cloud credentials.' });
+            }
             res.status(500).send({ error: 'An internal error occurred.' });
         }
     });
